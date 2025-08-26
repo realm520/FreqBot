@@ -1,0 +1,184 @@
+{
+    "supported_exchanges": {
+        "binance": {
+            "name": "Binance",
+            "ccxt_id": "binance",
+            "description": "全球最大的加密货币交易所",
+            "features": ["spot", "futures", "options"],
+            "sandbox_available": true,
+            "api_docs": "https://binance-docs.github.io/apidocs/",
+            "default_config": {
+                "enableRateLimit": true,
+                "timeout": 30000,
+                "rateLimit": 1200,
+                "headers": {}
+            },
+            "trading_fees": {
+                "maker": 0.001,
+                "taker": 0.001
+            }
+        },
+        "okx": {
+            "name": "OKX",
+            "ccxt_id": "okx",
+            "description": "全球领先的数字资产交易平台",
+            "features": ["spot", "futures", "options", "swap"],
+            "sandbox_available": true,
+            "api_docs": "https://www.okx.com/docs-v5/",
+            "default_config": {
+                "enableRateLimit": true,
+                "timeout": 30000,
+                "rateLimit": 100,
+                "headers": {}
+            },
+            "trading_fees": {
+                "maker": 0.0008,
+                "taker": 0.001
+            }
+        },
+        "bybit": {
+            "name": "Bybit",
+            "ccxt_id": "bybit",
+            "description": "专业的加密货币衍生品交易平台",
+            "features": ["spot", "futures", "options"],
+            "sandbox_available": true,
+            "api_docs": "https://bybit-exchange.github.io/docs/",
+            "default_config": {
+                "enableRateLimit": true,
+                "timeout": 30000,
+                "rateLimit": 120,
+                "headers": {}
+            },
+            "trading_fees": {
+                "maker": 0.001,
+                "taker": 0.001
+            }
+        },
+        "coinbase": {
+            "name": "Coinbase Pro",
+            "ccxt_id": "coinbase",
+            "description": "美国最大的加密货币交易所",
+            "features": ["spot"],
+            "sandbox_available": true,
+            "api_docs": "https://docs.cloud.coinbase.com/",
+            "default_config": {
+                "enableRateLimit": true,
+                "timeout": 30000,
+                "rateLimit": 334,
+                "headers": {}
+            },
+            "trading_fees": {
+                "maker": 0.005,
+                "taker": 0.005
+            }
+        },
+        "kraken": {
+            "name": "Kraken",
+            "ccxt_id": "kraken",
+            "description": "老牌欧美加密货币交易所",
+            "features": ["spot", "futures"],
+            "sandbox_available": false,
+            "api_docs": "https://docs.kraken.com/rest/",
+            "default_config": {
+                "enableRateLimit": true,
+                "timeout": 30000,
+                "rateLimit": 3000,
+                "headers": {}
+            },
+            "trading_fees": {
+                "maker": 0.0016,
+                "taker": 0.0026
+            }
+        },
+        "kucoin": {
+            "name": "KuCoin",
+            "ccxt_id": "kucoin",
+            "description": "全球知名的数字货币交易所",
+            "features": ["spot", "futures"],
+            "sandbox_available": true,
+            "api_docs": "https://docs.kucoin.com/",
+            "default_config": {
+                "enableRateLimit": true,
+                "timeout": 30000,
+                "rateLimit": 334,
+                "headers": {}
+            },
+            "trading_fees": {
+                "maker": 0.001,
+                "taker": 0.001
+            }
+        },
+        "huobi": {
+            "name": "Huobi",
+            "ccxt_id": "huobi",
+            "description": "全球化的数字资产金融服务商",
+            "features": ["spot", "futures"],
+            "sandbox_available": false,
+            "api_docs": "https://huobiapi.github.io/docs/",
+            "default_config": {
+                "enableRateLimit": true,
+                "timeout": 30000,
+                "rateLimit": 200,
+                "headers": {}
+            },
+            "trading_fees": {
+                "maker": 0.002,
+                "taker": 0.002
+            }
+        },
+        "bitget": {
+            "name": "Bitget",
+            "ccxt_id": "bitget",
+            "description": "全球化的数字资产衍生品交易平台",
+            "features": ["spot", "futures"],
+            "sandbox_available": true,
+            "api_docs": "https://bitgetlimited.github.io/apidoc/",
+            "default_config": {
+                "enableRateLimit": true,
+                "timeout": 30000,
+                "rateLimit": 200,
+                "headers": {}
+            },
+            "trading_fees": {
+                "maker": 0.001,
+                "taker": 0.001
+            }
+        },
+        "mexc": {
+            "name": "MEXC",
+            "ccxt_id": "mexc",
+            "description": "全球数字资产交易平台",
+            "features": ["spot", "futures"],
+            "sandbox_available": false,
+            "api_docs": "https://mxcdevelop.github.io/apidocs/",
+            "default_config": {
+                "enableRateLimit": true,
+                "timeout": 30000,
+                "rateLimit": 1000,
+                "headers": {}
+            },
+            "trading_fees": {
+                "maker": 0.002,
+                "taker": 0.002
+            }
+        },
+        "gate": {
+            "name": "Gate.io",
+            "ccxt_id": "gate",
+            "description": "全球知名的数字资产交易平台",
+            "features": ["spot", "futures", "options"],
+            "sandbox_available": true,
+            "api_docs": "https://www.gate.io/docs/developers/",
+            "default_config": {
+                "enableRateLimit": true,
+                "timeout": 30000,
+                "rateLimit": 200,
+                "headers": {}
+            },
+            "trading_fees": {
+                "maker": 0.002,
+                "taker": 0.002
+            }
+        }
+    }
+}

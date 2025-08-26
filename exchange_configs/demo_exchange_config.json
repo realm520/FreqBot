@@ -1,0 +1,42 @@
+{
+    "symbol": "BTC/USDT",
+    "exchange": {
+        "name": "demo",
+        "api_key": "demo_api_key_12345",
+        "secret_key": "demo_secret_key_67890",
+        "base_url": "https://api.demo-exchange.com",
+        "sandbox": true,
+        "enableRateLimit": true,
+        "timeout": 30000
+    },
+    "strategy_params": {
+        "min_order_size": 0.001,
+        "spread_ratio": 0.002,
+        "price_update_threshold": 0.0005,
+        "check_interval": 2.0
+    },
+    "position_balance": {
+        "position_imbalance_threshold": 0.15,
+        "max_position_value_ratio": 0.8,
+        "rebalance_urgency_multiplier": 1.5,
+        "retreat_distance": 0.001
+    },
+    "risk_management": {
+        "max_daily_loss": 50.0,
+        "position_limit": 500.0
+    },
+    "exchange_info": {
+        "name": "Demo Exchange",
+        "description": "模拟演示交易所，用于测试和学习",
+        "features": ["spot", "simulation"],
+        "trading_fees": {
+            "maker": 0.001,
+            "taker": 0.001
+        },
+        "api_docs": "https://github.com/your-repo/demo-exchange-docs"
+    },
+    "logging": {
+        "level": "INFO",
+        "file": "demo_exchange_mm.log"
+    }
+}
