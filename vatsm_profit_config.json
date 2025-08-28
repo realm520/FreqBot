@@ -4,9 +4,9 @@
     "stake_amount": "unlimited",
     "tradable_balance_ratio": 0.99,
     "fiat_display_currency": "USD",
+    "timeframe": "15m",
     "dry_run": true,
-    "dry_run_wallet": 1000,
-    "db_url": "sqlite:///user_data/freqbot_trades.db",
+    "dry_run_wallet": 100000,
     "cancel_open_orders_on_exit": false,
     "trading_mode": "spot",
     "margin_mode": "",
@@ -35,17 +35,12 @@
         "name": "binance",
         "key": "",
         "secret": "",
-        "ccxt_config": {
-            "enableRateLimit": true,
-            "sandbox": false
-        },
-        "ccxt_async_config": {
-            "enableRateLimit": true,
-            "sandbox": false
-        },
+        "ccxt_config": {},
+        "ccxt_async_config": {},
         "pair_whitelist": [
             "BTC/USDT",
-            "ETH/USDT"
+            "ETH/USDT",
+            "SOL/USDT"
         ],
         "pair_blacklist": []
     },
@@ -55,18 +50,7 @@
         }
     ],
     "edge": {
-        "enabled": false,
-        "process_throttle_secs": 3600,
-        "calculate_since_number_of_days": 7,
-        "allowed_risk": 0.01,
-        "stoploss_range_min": -0.01,
-        "stoploss_range_max": -0.1,
-        "stoploss_range_step": -0.01,
-        "minimum_winrate": 0.60,
-        "minimum_expectancy": 0.20,
-        "min_trade_number": 10,
-        "max_trade_duration_minute": 1440,
-        "remove_pumps": false
+        "enabled": false
     },
     "telegram": {
         "enabled": false,
@@ -74,20 +58,24 @@
         "chat_id": ""
     },
     "api_server": {
-        "enabled": true,
+        "enabled": false,
         "listen_ip_address": "127.0.0.1",
         "listen_port": 8080,
-        "verbosity": "info",
-        "enable_openapi": true,
-        "jwt_secret_key": "freqbot_secret_2025",
-        "CORS_origins": ["http://localhost:3000", "http://127.0.0.1:8080"],
-        "username": "freqbot",
-        "password": "freqbot123"
+        "verbosity": "error",
+        "enable_openapi": false,
+        "jwt_secret_key": "",
+        "CORS_origins": [],
+        "username": "",
+        "password": ""
     },
-    "bot_name": "FreqBot",
+    "bot_name": "freqtrade_vatsm_profit",
     "initial_state": "running",
     "force_entry_enable": false,
     "internals": {
         "process_throttle_secs": 5
-    }
+    },
+    "strategy": "VATSMProfitStrategy",
+    "strategy_path": "user_data/strategies/",
+    "dataformat_ohlcv": "feather",
+    "dataformat_trades": "feather"
 }

@@ -5,5 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "filelock>=3.19.1",
     "freqtrade>=2025.7",
+    "optuna>=4.5.0",
+    "scikit-optimize>=0.10.2",
 ]

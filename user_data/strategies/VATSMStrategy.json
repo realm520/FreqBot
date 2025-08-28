@@ -1,0 +1,75 @@
+{
+  "strategy_name": "VATSMStrategy",
+  "params": {
+    "roi": {
+      "0": 10
+    },
+    "stoploss": {
+      "stoploss": -0.15
+    },
+    "trailing": {
+      "trailing_stop": true,
+      "trailing_stop_positive": 0.005,
+      "trailing_stop_positive_offset": 0.015,
+      "trailing_only_offset_is_reached": false
+    },
+    "max_open_trades": {
+      "max_open_trades": 1
+    },
+    "buy": {
+      "adx_threshold": 30,
+      "breakout_threshold": 0.015,
+      "current_tf_weight": 0.488,
+      "ema_fast": 25,
+      "ema_slow": 43,
+      "enable_multi_timeframe": false,
+      "ewma_lambda": 0.958,
+      "higher_tf_weight": 0.326,
+      "kelly_cap": 0.368,
+      "kelly_lookback": 98,
+      "lb_max": 1769,
+      "lb_min": 566,
+      "lower_tf_weight": 0.37,
+      "max_leverage": 0.567,
+      "min_confirmations": 3,
+      "min_forecast_vol": 0.037,
+      "min_momentum_threshold": 0.004,
+      "performance_position_factor": 1.092,
+      "ratio_cap": 0.762,
+      "rsi_overbought": 73,
+      "rsi_oversold": 26,
+      "rsi_period": 12,
+      "swing_lookback": 7,
+      "vol_long_win": 3269,
+      "vol_short_win": 1016,
+      "vol_target": 0.112,
+      "volatility_position_factor": 1.954,
+      "volume_lookback": 12,
+      "volume_threshold": 1.482
+    },
+    "sell": {
+      "drawdown_pause_threshold": 0.135,
+      "enable_partial_exit": true,
+      "enable_signal_exit": true,
+      "max_daily_loss": 0.093,
+      "max_hold_hours": 45,
+      "max_weekly_loss": 0.156,
+      "partial_exit_1_profit": 0.026,
+      "partial_exit_1_ratio": 0.251,
+      "partial_exit_2_profit": 0.061,
+      "partial_exit_2_ratio": 0.305,
+      "reversal_momentum_threshold": -0.007,
+      "reversal_rsi_threshold": 79,
+      "tier1_distance": 0.003,
+      "tier1_profit": 0.011,
+      "tier2_distance": 0.016,
+      "tier2_profit": 0.019,
+      "tier3_distance": 0.034,
+      "tier3_profit": 0.041,
+      "time_exit_profit_threshold": -0.08
+    },
+    "protection": {}
+  },
+  "ft_stratparam_v": 1,
+  "export_time": "2025-08-27 05:21:08.146894+00:00"
+}

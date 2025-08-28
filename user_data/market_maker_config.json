@@ -1,20 +1,20 @@
 {
-    "max_open_trades": 3,
+    "max_open_trades": 10,
     "stake_currency": "USDT",
     "stake_amount": "unlimited",
     "tradable_balance_ratio": 0.99,
     "fiat_display_currency": "USD",
     "dry_run": true,
-    "dry_run_wallet": 1000,
-    "db_url": "sqlite:///user_data/freqbot_trades.db",
-    "cancel_open_orders_on_exit": false,
+    "dry_run_wallet": 10000,
+    "db_url": "sqlite:///user_data/market_maker_trades.db",
+    "cancel_open_orders_on_exit": true,
     "trading_mode": "spot",
     "margin_mode": "",
     "unfilledtimeout": {
-        "entry": 10,
-        "exit": 10,
+        "entry": 30,
+        "exit": 30,
         "exit_timeout_count": 0,
-        "unit": "minutes"
+        "unit": "seconds"
     },
     "entry_pricing": {
         "price_side": "same",
@@ -37,15 +37,17 @@
         "secret": "",
         "ccxt_config": {
             "enableRateLimit": true,
-            "sandbox": false
+            "sandbox": true,
+            "options": {
+                "adjustForTimeDifference": true
+            }
         },
         "ccxt_async_config": {
             "enableRateLimit": true,
-            "sandbox": false
+            "sandbox": true
         },
         "pair_whitelist": [
-            "BTC/USDT",
-            "ETH/USDT"
+            "BTC/USDT"
         ],
         "pair_blacklist": []
     },
@@ -54,20 +56,6 @@
             "method": "StaticPairList"
         }
     ],
-    "edge": {
-        "enabled": false,
-        "process_throttle_secs": 3600,
-        "calculate_since_number_of_days": 7,
-        "allowed_risk": 0.01,
-        "stoploss_range_min": -0.01,
-        "stoploss_range_max": -0.1,
-        "stoploss_range_step": -0.01,
-        "minimum_winrate": 0.60,
-        "minimum_expectancy": 0.20,
-        "min_trade_number": 10,
-        "max_trade_duration_minute": 1440,
-        "remove_pumps": false
-    },
     "telegram": {
         "enabled": false,
         "token": "",
@@ -79,15 +67,17 @@
         "listen_port": 8080,
         "verbosity": "info",
         "enable_openapi": true,
-        "jwt_secret_key": "freqbot_secret_2025",
+        "jwt_secret_key": "freqbot_market_maker_2025",
         "CORS_origins": ["http://localhost:3000", "http://127.0.0.1:8080"],
-        "username": "freqbot",
-        "password": "freqbot123"
+        "username": "",
+        "password": ""
     },
-    "bot_name": "FreqBot",
+    "bot_name": "FreqBot_MarketMaker",
     "initial_state": "running",
-    "force_entry_enable": false,
+    "force_entry_enable": true,
     "internals": {
-        "process_throttle_secs": 5
-    }
+        "process_throttle_secs": 1
+    },
+    "dataformat_ohlcv": "feather",
+    "dataformat_trades": "feather"
 }
