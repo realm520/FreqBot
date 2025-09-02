@@ -55,3 +55,14 @@ htmlcov/
 .coverage
 .coverage.*
 coverage.xml
+
+# 环境变量和API密钥
+.env
+.env.local
+.env.production
+*.key
+*.pem
+
+# 临时配置文件
+temp_*.json
+*_temp.json
