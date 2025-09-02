@@ -1,106 +1,179 @@
-# FreqBot - 量化交易机器人
+# FreqBot - 统一量化交易平台
 
-FreqBot 是一个基于Freqtrade框架的量化交易机器人项目，专注于开发盈利的交易策略和自动化交易功能。
+FreqBot 是一个基于 FreqTrade 框架的统一量化交易平台，提供策略管理、配置管理、执行引擎和监控功能的完整解决方案。
 
-## 📚 完整文档
+## ✨ 核心特性
 
-详细的策略指南、分析报告和使用说明请查看：
-**[📖 FreqBot 文档中心](docs/README.md)**
+### 🎯 统一入口
+- **单一CLI命令**: 所有功能通过 `uv run python main.py` 访问
+- **命令行界面**: 直观的命令和参数，无需记忆复杂脚本
+- **交互式操作**: 友好的用户体验和实时反馈
+
+### 📊 策略管理
+- **自动发现**: 智能识别和注册所有策略文件
+- **分类管理**: 按类别组织策略（做市商、网格交易、VATSM等）
+- **元数据支持**: 策略版本、作者、描述等完整信息
+- **验证机制**: 自动验证策略有效性
+
+### ⚙️ 配置管理
+- **环境分离**: 开发、测试、生产环境独立配置
+- **模板化**: 基于模板快速生成配置文件
+- **配置迁移**: 一键迁移现有配置到新架构
+- **参数验证**: 自动验证配置文件正确性
+
+### 🚀 执行引擎
+- **FreqTrade集成**: 无缝集成FreqTrade执行引擎
+- **实时监控**: 策略运行过程的实时日志和状态监控
+- **回测支持**: 完整的策略回测和性能分析
+- **数据管理**: 自动下载和管理历史数据
 
 ## 🚀 快速开始
 
-### 环境设置
-```bash
-# 安装依赖
-uv sync
+### 基本命令
 
-# 下载数据
-uv run freqtrade download-data --config vatsm_btc_config.json --exchange binance --pairs BTC/USDT ETH/USDT --timeframes 15m --days 30
+```bash
+# 查看所有可用命令
+uv run python main.py --help
+
+# 列出所有策略
+uv run python main.py list-strategies
+
+# 列出所有环境
+uv run python main.py list-envs
+
+# 运行策略（模拟交易 + 监控）
+uv run python main.py run --strategy AdvancedMarketMakerV2 --env demo --monitor
+
+# 回测策略
+uv run python main.py backtest --strategy VATSMStrategy --env demo --timerange 20240901-20240902
+
+# 监控交易
+uv run python main.py monitor --db demo_trades.sqlite
 ```
 
-### 策略回测
-```bash
-# 均值回归策略 (推荐)
-uv run freqtrade backtesting --config mean_reversion_config.json --strategy MeanReversionProfitStrategy --timerange 20240701-20240827
+### 从旧版本迁移
 
-# VATSM盈利策略
-uv run freqtrade backtesting --config vatsm_profit_config.json --strategy VATSMProfitStrategy --timerange 20240701-20240827
+```bash
+# 迁移现有配置文件
+uv run python main.py migrate-config --file old_config.json --env production
+
+# 查看迁移后的环境
+uv run python main.py list-envs
 ```
 
-### 模拟交易
-```bash
-# 开始模拟交易
-uv run freqtrade trade --config mean_reversion_config.json --strategy MeanReversionProfitStrategy
-
-# 启动Web界面
-uv run freqtrade webserver --config mean_reversion_config.json
-# 访问 http://localhost:8080
-```
-
-## 📊 策略表现 (2024年7-8月)
-
-| 策略 | 收益率 | 胜率 | 最大回撤 | 推荐度 |
-|------|--------|------|----------|---------|
-| **MeanReversionProfitStrategy** | -0.002% | 50.0% | 0.01% | ⭐⭐⭐⭐⭐ |
-| **VATSMProfitStrategy** | -1.65% | 24.2% | 1.65% | ⭐⭐⭐ |
-| **VATSMStrategy** | -5.46% | 83.3% | 8.54% | ⭐⭐ |
-
-## 🎯 核心特性
-
-- ✅ **市场环境识别**: 自动区分趋势/震荡市场
-- ✅ **Kelly仓位管理**: 基于历史胜率的动态仓位
-- ✅ **多重风险控制**: 分层止损和回撤保护
-- ✅ **多时间框架**: 4H+1H+15M协同分析
-- ✅ **快速止盈**: 分批获利和激进盈利机制
-
-## 📁 项目结构
+## 📁 项目架构
 
 ```
 FreqBot/
-├── docs/                    # 📚 完整文档中心
-│   ├── strategies/          # 策略指南
-│   ├── reports/            # 分析报告  
-│   ├── guides/             # 操作指南
-│   └── analysis/           # 数据分析
-├── user_data/              # Freqtrade数据目录
-│   ├── strategies/         # 策略代码
-│   ├── data/              # 市场数据
-│   └── backtest_results/  # 回测结果
-├── *_config.json          # 各策略配置文件
-└── CLAUDE.md              # 开发规范
+├── freqbot/                    # 核心框架
+│   ├── config/                 # 配置管理器
+│   │   ├── manager.py         # 统一配置管理
+│   │   └── templates/         # 配置模板
+│   ├── strategies/             # 策略管理器
+│   │   ├── registry.py        # 策略注册表
+│   │   └── loader.py          # 动态加载器
+│   ├── core/                   # 核心功能
+│   │   ├── engine.py          # 交易执行引擎
+│   │   └── monitor.py         # 实时监控器
+│   └── cli.py                  # 命令行接口
+├── configs/                    # 统一配置目录
+│   ├── environments/           # 环境配置
+│   ├── strategies/            # 策略配置
+│   └── templates/             # 配置模板
+├── strategies/                 # 策略实现
+│   ├── market_maker/          # 做市商策略
+│   ├── vatsm/                 # VATSM策略
+│   ├── grid_trading/          # 网格策略
+│   └── ...
+├── user_data/                 # FreqTrade数据
+└── main.py                    # 统一入口点
 ```
 
-## 🛠️ 开发指南
+## 📊 可用策略
 
-### 添加新策略
-1. 在 `user_data/strategies/` 创建策略文件
-2. 继承 `IStrategy` 基类
-3. 实现必要的方法和指标
-4. 创建对应的配置文件
-5. 更新文档
+### 🤖 做市商策略
+- **AdvancedMarketMakerV2**: 智能做市商，提供流动性并从价差获利
+- **FreqTradeMarketMaker**: 基础做市商策略
 
-### 参数优化
-```bash
-# 超参数优化
-uv run freqtrade hyperopt --config mean_reversion_config.json --strategy MeanReversionProfitStrategy --hyperopt-loss ShortTradeDurHyperOptLoss --epochs 50
-```
+### 📈 趋势策略  
+- **VATSMStrategy**: 波动率适应性策略，多时间框架融合
+- **MeanReversionProfitStrategy**: 均值回归策略
 
-### 实盘部署注意事项
-1. ⚠️ **风险警告**: 量化交易存在资金损失风险
-2. 📊 **充分回测**: 确保策略在历史数据上表现良好
-3. 💰 **小额开始**: 初始资金建议不超过总资金的10%
-4. 📈 **持续监控**: 定期检查策略表现并调整参数
+### 🔲 网格策略
+- **GridTradingStrategy**: 网格交易，适合震荡市场
 
-## 🔗 相关资源
+## 🔧 配置管理
 
-- **Freqtrade官方文档**: https://www.freqtrade.io/
-- **项目开发规范**: [CLAUDE.md](CLAUDE.md)
-- **策略详细指南**: [docs/README.md](docs/README.md)
+### 环境配置
+- **demo**: 模拟交易环境，用于测试和学习
+- **production**: 生产环境模板，需要配置真实API
+- **custom**: 自定义环境配置
 
-## 📄 开源协议
+### 策略配置
+- 每个策略可以有独立的参数配置
+- 支持策略参数优化和版本管理
+- 配置热更新，无需重启
 
-本项目采用 MIT 协议开源，欢迎贡献代码和改进建议。
+## 📊 监控和分析
+
+### 实时监控
+- 交易统计和盈亏分析
+- 持仓状态和库存平衡
+- 风险指标和性能评估
+- 实时日志和告警
+
+### 数据导出
+- JSON格式统计数据导出
+- 兼容现有分析工具
+- 自定义报告生成
+
+## 🔒 安全特性
+
+### 风险管理
+- 多层风险控制机制
+- 仓位和止损限制
+- 实时风险监控和告警
+
+### 数据安全
+- API密钥通过环境变量管理
+- 配置文件加密支持
+- 审计日志记录
+
+## 📚 详细文档
+
+- **[使用指南](FREQBOT_USAGE.md)**: 详细的命令和配置说明
+- **[策略文档](docs/strategies/)**: 各策略详细说明和分析
+- **[开发指南](docs/guides/)**: 自定义策略和扩展开发
+
+## 🛠 技术栈
+
+- **Python 3.12+**: 现代Python特性支持
+- **FreqTrade 2025.7+**: 强大的交易执行框架
+- **SQLite**: 轻量级数据存储
+- **uv**: 现代Python包管理工具
+
+## 🤝 贡献指南
+
+我们欢迎所有形式的贡献：
+
+1. **Bug报告**: 发现问题请创建Issue
+2. **功能建议**: 提出新功能想法
+3. **代码贡献**: 提交Pull Request
+4. **文档改进**: 完善文档和示例
+
+## ⚠️ 风险提示
+
+⚠️ **重要安全提示**:
+
+1. **学习目的**: 本项目主要用于量化交易学习和研究
+2. **充分测试**: 实盘交易前务必进行充分回测验证
+3. **风险控制**: 量化交易存在风险，请设置合适的止损和仓位控制
+4. **渐进式部署**: 建议从小资金开始，逐步验证策略有效性
+
+## 📄 许可证
+
+本项目采用 MIT 许可证，详见 [LICENSE](LICENSE) 文件。
 
 ---
 
-**⚠️ 风险提示**: 量化交易存在资金损失风险，请在充分了解策略原理和风险的情况下使用。建议先进行模拟交易，确认策略表现后再使用真实资金。
+**让量化交易更简单、更安全、更高效！** 🚀

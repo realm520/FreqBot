@@ -1,0 +1,67 @@
+{
+  "trading_mode": "spot",
+  "dry_run": false,
+  "cancel_open_orders_on_exit": true,
+  "unfilledtimeout": {
+    "entry": 30,
+    "exit": 60
+  },
+  "max_open_trades": 5,
+  "minimum_trade_amount": 20,
+  "tradable_balance_ratio": 0.9,
+  "fiat_display_currency": "USD",
+  "stake_currency": "USDT",
+  "stake_amount": 100,
+  "timeframe": "5m",
+  "startup_candle_count": 50,
+  "process_only_new_candles": true,
+  "exchange": {
+    "name": "binance",
+    "ccxt_config": {
+      "enableRateLimit": true,
+      "rateLimit": 1000
+    },
+    "pair_whitelist": [
+      "BTC/USDT",
+      "ETH/USDT"
+    ],
+    "pair_blacklist": []
+  },
+  "entry_pricing": {
+    "price_side": "other",
+    "use_order_book": true,
+    "order_book_top": 1
+  },
+  "exit_pricing": {
+    "price_side": "other", 
+    "use_order_book": true,
+    "order_book_top": 1
+  },
+  "pairlists": [
+    {
+      "method": "StaticPairList"
+    }
+  ],
+  "api_server": {
+    "enabled": true,
+    "listen_ip_address": "127.0.0.1",
+    "listen_port": 8080,
+    "verbosity": "info",
+    "enable_openapi": true,
+    "jwt_secret_key": "${JWT_SECRET}",
+    "username": "${API_USERNAME}",
+    "password": "${API_PASSWORD}"
+  },
+  "bot_name": "FreqBot-Production",
+  "initial_state": "running",
+  "force_entry_enable": false,
+  "internals": {
+    "process_throttle_secs": 1,
+    "heartbeat_interval": 30
+  },
+  "datadir": "user_data/data",
+  "user_data_dir": "user_data",
+  "logfile": "logs/freqbot_production.log",
+  "db_url": "sqlite:///production_trades.sqlite",
+  "fee": 0.001
+}

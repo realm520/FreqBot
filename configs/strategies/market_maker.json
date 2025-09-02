@@ -1,0 +1,15 @@
+{
+  "strategy_description": "做市商策略配置",
+  "strategy_parameters": {
+    "spread_ratio": 0.002,
+    "order_amount_ratio": 0.1,
+    "max_inventory_ratio": 0.3,
+    "rebalance_threshold": 0.2,
+    "price_update_interval": 60
+  },
+  "risk_management": {
+    "stop_loss_ratio": 0.05,
+    "max_drawdown": 0.1,
+    "position_limit": 0.5
+  }
+}
