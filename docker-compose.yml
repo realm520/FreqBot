@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  freqtrade:
+    image: freqtradeorg/freqtrade:stable
+    container_name: freqtrade_webui
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+      - "./freqbot_config/data:/freqtrade/user_data/data"
+    ports:
+      - "8080:8080"
+    environment:
+      - FREQTRADE_CONFIG=/freqtrade/user_data/config_docker.json
+    command: >
+      webserver
+      --config /freqtrade/user_data/config_docker.json
+    restart: unless-stopped
+
+  freqtrade-backtesting:
+    image: freqtradeorg/freqtrade:stable
+    container_name: freqtrade_backtesting
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+      - "./freqbot_config/data:/freqtrade/user_data/data"
+    profiles:
+      - backtesting
+    command: >
+      backtesting
+      --config /freqtrade/user_data/config_docker.json
+      --strategy VolatilityIndicatorsStrategy
+      --timeframe 15m
+      --timerange 20240101-20240826
+      --export trades
+      --export-filename user_data/backtest_results/backtest-result-volatility.json
+
+  freqtrade-download:
+    image: freqtradeorg/freqtrade:stable
+    container_name: freqtrade_download
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+      - "./freqbot_config/data:/freqtrade/user_data/data"
+    profiles:
+      - download
+    command: >
+      download-data
+      --config /freqtrade/user_data/config_docker.json
+      --timeframe 15m
+      --pairs ETH/USDT BTC/USDT
+      --timerange 20240101-20240826
