@@ -6,10 +6,9 @@ branch: epic/strategy-21
 # Execution Status
 
 ## Ready Tasks (可立即开始)
-- Issue #8: 回测验证脚本 (依赖#3,#4,#5,#6已完成)
+- Issue #10: 集成测试套件 (依赖#8已完成)
 
 ## Blocked Tasks (等待依赖)
-- Issue #10: 集成测试套件 (等待 #8)
 - Issue #11: 文档与部署 (等待 #10)
 
 ## Active Agents
@@ -23,3 +22,4 @@ branch: epic/strategy-21
 - Issue #5: 仓位管理优化 ✅ (Agent-5完成于 2025-09-06T06:45:00Z)
 - Issue #6: 风控系统集成 ✅ (Agent-6完成于 2025-09-06T06:48:00Z)
 - Issue #9: 性能监控面板 ✅ (Agent-7完成于 2025-09-06T06:50:00Z)
+- Issue #8: 回测验证脚本 ✅ (Agent-8完成于 2025-09-06T06:55:00Z)
