@@ -1,0 +1,290 @@
+{
+  "// 注释": "Strategy-21 VATSM 测试环境配置文件",
+  "// 版本": "1.0.0",
+  "// 更新时间": "2025-09-06T05:48:55Z",
+  "// 说明": "用于 Strategy-21 策略的模拟交易和测试环境，包含安全的参数设置",
+  
+  "// 基础交易模式": "模拟交易，不会使用真实资金",
+  "trading_mode": "spot",
+  "dry_run": true,
+  "dry_run_wallet": 50000,
+  "cancel_open_orders_on_exit": true,
+  
+  "// 资金管理 - 测试环境": "较大的模拟资金便于测试各种情况",
+  "max_open_trades": 10,
+  "minimum_trade_amount": 10,
+  "stake_currency": "USDT",
+  "stake_amount": "unlimited",
+  "tradable_balance_ratio": 0.90,
+  "available_capital": 50000,
+  "fiat_display_currency": "USD",
+  
+  "// 时间框架配置": "适合测试的较短周期",
+  "timeframe": "5m",
+  "startup_candle_count": 500,
+  "process_only_new_candles": false,
+  
+  "// 交易所配置 - 测试模式": "使用沙盒环境进行测试",
+  "exchange": {
+    "name": "binance",
+    "key": "",
+    "secret": "",
+    "ccxt_config": {
+      "enableRateLimit": true,
+      "rateLimit": 1000,
+      "sandbox": true
+    },
+    "ccxt_async_config": {
+      "enableRateLimit": true,
+      "rateLimit": 1000,
+      "sandbox": true
+    },
+    "pair_whitelist": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "BNB/USDT",
+      "ADA/USDT",
+      "SOL/USDT"
+    ],
+    "pair_blacklist": [
+      ".*UP/.*",
+      ".*DOWN/.*",
+      ".*(3|5)(S|L)/.*"
+    ]
+  },
+  
+  "// 价格获取配置": "测试环境使用更快的价格获取方式",
+  "entry_pricing": {
+    "price_side": "same",
+    "use_order_book": false,
+    "order_book_top": 1,
+    "price_last_balance": 0.0
+  },
+  
+  "exit_pricing": {
+    "price_side": "same",
+    "use_order_book": false,
+    "order_book_top": 1
+  },
+  
+  "// 订单类型配置": "测试环境使用限价单",
+  "order_types": {
+    "entry": "limit",
+    "exit": "limit",
+    "emergency_exit": "market",
+    "force_entry": "market",
+    "force_exit": "market",
+    "stoploss": "limit",
+    "stoploss_on_exchange": false,
+    "stoploss_on_exchange_interval": 60
+  },
+  
+  "order_time_in_force": {
+    "entry": "GTC",
+    "exit": "GTC"
+  },
+  
+  "// 订单超时配置": "测试环境使用较短超时时间",
+  "unfilledtimeout": {
+    "entry": 5,
+    "exit": 10,
+    "exit_timeout_count": 0,
+    "unit": "minutes"
+  },
+  
+  "// 交易对选择配置": "测试环境使用静态交易对列表",
+  "pairlists": [
+    {
+      "method": "StaticPairList"
+    }
+  ],
+  
+  "// 保护机制配置 - 测试环境": "相对宽松的保护设置便于观察策略行为",
+  "protections": [
+    {
+      "method": "StoplossGuard",
+      "lookback_period_candles": 30,
+      "trade_limit": 6,
+      "stop_duration_candles": 30,
+      "required_profit": -0.15,
+      "only_per_pair": false
+    },
+    {
+      "method": "MaxDrawdown",
+      "lookback_period_candles": 100,
+      "trade_limit": 15,
+      "stop_duration_candles": 50,
+      "max_allowed_drawdown": 0.30
+    }
+  ],
+  
+  "// 策略配置": "Strategy-21 VATSM 策略",
+  "strategy": "Strategy21VATSM",
+  "strategy_path": "user_data/strategies/",
+  
+  "// 数据存储配置": "测试环境独立的数据库",
+  "db_url": "sqlite:///user_data/strategy21_demo_trades.sqlite",
+  "user_data_dir": "user_data",
+  "datadir": "user_data/data",
+  
+  "// 日志配置": "测试环境使用详细日志",
+  "log_level": "DEBUG",
+  "logfile": "logs/strategy21_demo.log",
+  
+  "// API服务配置": "测试环境API设置",
+  "api_server": {
+    "enabled": true,
+    "listen_ip_address": "127.0.0.1",
+    "listen_port": 8081,
+    "verbosity": "info",
+    "enable_openapi": true,
+    "jwt_secret_key": "strategy21_demo_secret_2025",
+    "CORS_origins": [
+      "http://localhost:3000",
+      "http://127.0.0.1:8081"
+    ],
+    "username": "strategy21_demo",
+    "password": "demo_pass_2025"
+  },
+  
+  "// 机器人配置": "测试环境机器人设置",
+  "bot_name": "Strategy21-VATSM-Demo",
+  "initial_state": "running",
+  "force_entry_enable": true,
+  
+  "// 内部配置": "测试环境系统参数",
+  "internals": {
+    "process_throttle_secs": 2,
+    "heartbeat_interval": 30,
+    "sd_notify": false
+  },
+  
+  "// Telegram通知配置": "测试环境通知设置",
+  "telegram": {
+    "enabled": false,
+    "token": "",
+    "chat_id": "",
+    "notification_settings": {
+      "status": "on",
+      "warning": "on",
+      "startup": "on",
+      "entry": "on",
+      "exit": "on"
+    }
+  },
+  
+  "// Edge位置管理配置": "测试环境禁用复杂功能",
+  "edge": {
+    "enabled": false
+  },
+  
+  "// 手续费配置": "测试环境手续费",
+  "fee": 0.001,
+  
+  "// Strategy-21 特定配置覆盖": "测试环境的参数调整",
+  "strategy_config_overrides": {
+    "// VATSM指标参数 - 测试环境": "使用更敏感的参数便于观察信号",
+    "vatsm_indicators": {
+      "volume_sma_period": 15,
+      "volume_threshold_multiplier": 1.3,
+      "atr_period": 10,
+      "trend_sma_period": 30,
+      "trend_ema_period": 15,
+      "strength_rsi_period": 10,
+      "momentum_period": 10
+    },
+    
+    "// 信号系统 - 测试环境": "降低信号门槛增加交易频率",
+    "signal_system": {
+      "entry_signals": {
+        "volume_threshold": 1.3,
+        "strength_min_score": 0.5,
+        "momentum_min_score": 0.4,
+        "confluence_required_signals": 2
+      },
+      "exit_signals": {
+        "profit_target_pct": 0.02,
+        "trend_reversal_sensitivity": 0.6
+      },
+      "signal_confirmation": {
+        "confirmation_candles": 1,
+        "signal_timeout_candles": 15
+      }
+    },
+    
+    "// 仓位管理 - 测试环境": "使用较小仓位进行测试",
+    "position_management": {
+      "position_levels": {
+        "small": {
+          "min_pct": 0.005,
+          "max_pct": 0.01
+        },
+        "medium": {
+          "min_pct": 0.015,
+          "max_pct": 0.025
+        },
+        "large": {
+          "min_pct": 0.03,
+          "max_pct": 0.04
+        }
+      },
+      "risk_adjustment": {
+        "kelly_fraction": 0.2,
+        "max_portfolio_risk": 0.3
+      },
+      "position_limits": {
+        "max_single_position_pct": 0.05,
+        "max_total_positions": 10,
+        "max_correlation_positions": 4
+      }
+    },
+    
+    "// 风险管理 - 测试环境": "相对宽松的止损设置",
+    "risk_management": {
+      "three_layer_stop_loss": {
+        "fixed_stop_pct": 0.03,
+        "trailing_stop_pct": 0.02,
+        "atr_multiplier": 2.5,
+        "min_profit_to_trail": 0.01
+      },
+      "drawdown_protection": {
+        "max_drawdown_pct": 0.25,
+        "warning_drawdown_pct": 0.15,
+        "position_scaling_enabled": true,
+        "position_scaling_factor": 0.6
+      },
+      "emergency_controls": {
+        "max_daily_loss_pct": 0.15,
+        "max_consecutive_losses": 8,
+        "volatility_threshold": 4.0
+      }
+    }
+  },
+  
+  "// 测试专用配置": "仅在测试环境使用的特殊设置",
+  "test_specific_settings": {
+    "// 性能监控": "详细的性能指标收集",
+    "performance_tracking": {
+      "detailed_logging": true,
+      "trade_analysis": true,
+      "signal_analysis": true,
+      "execution_timing": true
+    },
+    
+    "// 调试功能": "便于开发和调试的功能",
+    "debug_features": {
+      "plot_indicators": true,
+      "save_signal_data": true,
+      "export_trades": true,
+      "verbose_exit_reasons": true
+    },
+    
+    "// 快速测试模式": "用于快速验证策略逻辑",
+    "fast_test_mode": {
+      "enabled": false,
+      "accelerated_time": 10,
+      "skip_confirmation_candles": true,
+      "ignore_cooldown_periods": true
+    }
+  }
+}

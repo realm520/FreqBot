@@ -1,0 +1,367 @@
+{
+  "// 注释": "Strategy-21 VATSM 参数配置文件",
+  "// 版本": "1.0.0",
+  "// 更新时间": "2025-09-06T05:48:55Z",
+  "// 说明": "包含 VATSM (Volume-ATR-Trend-Strength-Momentum) 策略的所有可调参数",
+  
+  "strategy_params": {
+    "version": "1.0.0",
+    "last_updated": "2025-09-06T05:48:55Z",
+    
+    "// VATSM技术指标参数": "各个技术指标的计算周期和敏感度设置",
+    "vatsm_indicators": {
+      "// 成交量指标": "用于识别市场活跃度和流动性",
+      "volume_sma_period": 20,
+      "volume_threshold_multiplier": 1.5,
+      "volume_spike_detection": true,
+      "volume_spike_threshold": 3.0,
+      
+      "// ATR波动率指标": "用于衡量市场波动程度和设置动态止损",
+      "atr_period": 14,
+      "atr_smoothing_period": 3,
+      "atr_min_threshold": 0.001,
+      "atr_max_threshold": 0.1,
+      "atr_percentile_window": 100,
+      
+      "// 趋势指标": "用于确定市场主要方向",
+      "trend_sma_period": 50,
+      "trend_ema_period": 21,
+      "trend_fast_ema": 12,
+      "trend_slow_ema": 26,
+      "trend_confirmation_candles": 3,
+      "trend_strength_threshold": 0.6,
+      
+      "// 强度指标": "用于评估价格动量和超买超卖状态",
+      "strength_rsi_period": 14,
+      "strength_rsi_overbought": 70,
+      "strength_rsi_oversold": 30,
+      "strength_macd_fast": 12,
+      "strength_macd_slow": 26,
+      "strength_macd_signal": 9,
+      "strength_bb_period": 20,
+      "strength_bb_std": 2,
+      
+      "// 动量指标": "用于捕捉价格变化的加速度",
+      "momentum_period": 14,
+      "momentum_smoothing": 3,
+      "momentum_rate_of_change": 10,
+      "momentum_williams_r_period": 14,
+      "momentum_stoch_k_period": 14,
+      "momentum_stoch_d_period": 3
+    },
+    
+    "// 信号系统配置": "买入卖出信号的生成和过滤规则",
+    "signal_system": {
+      "// 买入信号配置": "多重条件验证确保信号质量",
+      "entry_signals": {
+        "volume_threshold": 1.5,
+        "atr_min_threshold": 0.001,
+        "trend_alignment_required": true,
+        "trend_alignment_tolerance": 0.1,
+        "strength_min_score": 0.6,
+        "strength_rsi_range": [30, 70],
+        "momentum_min_score": 0.5,
+        "momentum_acceleration_required": true,
+        "confluence_required_signals": 3,
+        "max_correlation_threshold": 0.8
+      },
+      
+      "// 卖出信号配置": "利润保护和风险控制机制",
+      "exit_signals": {
+        "profit_target_pct": 0.025,
+        "profit_target_dynamic": true,
+        "profit_target_atr_multiplier": 3.0,
+        "trend_reversal_sensitivity": 0.7,
+        "trend_weakening_threshold": 0.4,
+        "strength_weakness_threshold": 0.3,
+        "strength_overbought_exit": true,
+        "momentum_exhaustion_threshold": 0.2,
+        "momentum_divergence_detection": true,
+        "volume_drying_threshold": 0.6
+      },
+      
+      "// 信号权重配置": "各个指标在综合信号中的重要程度",
+      "signal_weights": {
+        "volume_weight": 0.20,
+        "atr_weight": 0.15,
+        "trend_weight": 0.25,
+        "strength_weight": 0.25,
+        "momentum_weight": 0.15
+      },
+      
+      "// 信号确认配置": "减少假信号的过滤机制",
+      "signal_confirmation": {
+        "confirmation_candles": 2,
+        "signal_timeout_candles": 10,
+        "reentry_cooldown_candles": 5,
+        "signal_strength_threshold": 0.65,
+        "multi_timeframe_confirmation": false,
+        "higher_tf_confirmation": "15m"
+      }
+    },
+    
+    "// 仓位管理配置": "动态仓位分配和风险控制",
+    "position_management": {
+      "// 仓位级别配置": "根据信号强度分配不同仓位大小",
+      "position_levels": {
+        "small": {
+          "min_pct": 0.01,
+          "max_pct": 0.02,
+          "signal_threshold_min": 0.0,
+          "signal_threshold_max": 0.4,
+          "description": "低信号强度，小仓位试探"
+        },
+        "medium": {
+          "min_pct": 0.03,
+          "max_pct": 0.05,
+          "signal_threshold_min": 0.4,
+          "signal_threshold_max": 0.7,
+          "description": "中等信号强度，标准仓位"
+        },
+        "large": {
+          "min_pct": 0.06,
+          "max_pct": 0.08,
+          "signal_threshold_min": 0.7,
+          "signal_threshold_max": 1.0,
+          "description": "高信号强度，较大仓位"
+        }
+      },
+      
+      "// 风险调整配置": "基于市场条件的动态风险管理",
+      "risk_adjustment": {
+        "atr_risk_multiplier": 2.0,
+        "volatility_scaling": true,
+        "volatility_lookback": 50,
+        "kelly_fraction": 0.25,
+        "kelly_lookback_trades": 50,
+        "max_portfolio_risk": 0.5,
+        "drawdown_scaling": true,
+        "drawdown_threshold": 0.1,
+        "correlation_adjustment": true,
+        "correlation_threshold": 0.7
+      },
+      
+      "// 仓位限制配置": "硬性限制防止过度集中风险",
+      "position_limits": {
+        "max_single_position_pct": 0.1,
+        "max_total_positions": 8,
+        "max_correlation_positions": 3,
+        "max_sector_exposure": 0.3,
+        "min_position_spacing_hours": 1,
+        "max_daily_positions": 10,
+        "position_sizing_method": "fixed_fractional"
+      }
+    },
+    
+    "// 风险管理配置": "多层次风险控制机制",
+    "risk_management": {
+      "// 三层止损系统": "固定止损、追踪止损、ATR止损的组合",
+      "three_layer_stop_loss": {
+        "fixed_stop_pct": 0.02,
+        "fixed_stop_enabled": true,
+        "trailing_stop_pct": 0.015,
+        "trailing_stop_enabled": true,
+        "trailing_stop_positive": 0.01,
+        "trailing_stop_positive_offset": 0.005,
+        "atr_multiplier": 2.0,
+        "atr_stop_enabled": true,
+        "min_profit_to_trail": 0.01,
+        "stop_loss_method": "adaptive"
+      },
+      
+      "// 回撤保护配置": "账户级别的回撤控制",
+      "drawdown_protection": {
+        "max_drawdown_pct": 0.15,
+        "max_drawdown_absolute": 1500,
+        "warning_drawdown_pct": 0.10,
+        "recovery_threshold": 0.05,
+        "position_scaling_enabled": true,
+        "position_scaling_factor": 0.5,
+        "daily_peak_reset": true,
+        "monthly_peak_reset": false,
+        "drawdown_calculation_method": "high_water_mark"
+      },
+      
+      "// 紧急控制配置": "极端情况下的自动保护机制",
+      "emergency_controls": {
+        "max_daily_loss_pct": 0.08,
+        "max_daily_loss_absolute": 800,
+        "max_consecutive_losses": 5,
+        "consecutive_loss_scaling": 0.7,
+        "volatility_threshold": 3.0,
+        "volatility_shutdown": true,
+        "liquidity_threshold": 0.5,
+        "liquidity_check_enabled": true,
+        "force_close_timeout_seconds": 300,
+        "emergency_exit_method": "market_order"
+      },
+      
+      "// 时间风险控制": "基于时间的风险管理",
+      "time_based_risks": {
+        "max_position_hold_hours": 48,
+        "weekend_close_positions": false,
+        "holiday_trading": true,
+        "session_based_sizing": {
+          "asia_session_multiplier": 0.8,
+          "europe_session_multiplier": 1.0,
+          "america_session_multiplier": 1.2
+        }
+      }
+    },
+    
+    "// 市场条件配置": "不同市场环境的参数自适应",
+    "market_conditions": {
+      "// 趋势检测配置": "识别牛市、熊市、震荡市",
+      "trend_detection": {
+        "trend_strength_threshold": 0.6,
+        "sideways_range_pct": 0.02,
+        "trend_confirmation_candles": 5,
+        "trend_lookback_periods": 100,
+        "adx_threshold": 25,
+        "adx_period": 14
+      },
+      
+      "// 波动率状态配置": "低波动、高波动市场的识别",
+      "volatility_regimes": {
+        "low_volatility_threshold": 0.5,
+        "high_volatility_threshold": 2.0,
+        "volatility_lookback_periods": 50,
+        "volatility_percentile_window": 100,
+        "regime_change_threshold": 0.3
+      },
+      
+      "// 市场时段配置": "不同交易时段的策略调整",
+      "market_sessions": {
+        "asia_session": {
+          "start": "00:00",
+          "end": "08:00",
+          "timezone": "UTC",
+          "active": true,
+          "volume_multiplier": 0.8,
+          "signal_threshold_adjustment": 0.1
+        },
+        "europe_session": {
+          "start": "08:00",
+          "end": "16:00",
+          "timezone": "UTC",
+          "active": true,
+          "volume_multiplier": 1.0,
+          "signal_threshold_adjustment": 0.0
+        },
+        "america_session": {
+          "start": "16:00",
+          "end": "24:00",
+          "timezone": "UTC",
+          "active": true,
+          "volume_multiplier": 1.2,
+          "signal_threshold_adjustment": -0.05
+        }
+      },
+      
+      "// 市场状态自适应": "策略参数的动态调整机制",
+      "adaptive_parameters": {
+        "enabled": true,
+        "adaptation_period": 50,
+        "performance_threshold": 0.6,
+        "parameter_adjustment_range": 0.2,
+        "reversion_threshold": 0.4
+      }
+    },
+    
+    "// 交易执行配置": "订单执行和滑点控制",
+    "execution_settings": {
+      "// 订单执行配置": "控制订单的提交和执行方式",
+      "order_execution": {
+        "entry_order_type": "limit",
+        "exit_order_type": "limit",
+        "limit_order_offset_pct": 0.001,
+        "market_order_threshold": 0.005,
+        "order_timeout_minutes": 10,
+        "partial_fill_handling": "cancel_remaining",
+        "minimum_fill_ratio": 0.9
+      },
+      
+      "// 滑点控制配置": "控制交易成本和执行效率",
+      "slippage_control": {
+        "max_slippage_pct": 0.005,
+        "slippage_buffer_pct": 0.001,
+        "dynamic_slippage_adjustment": true,
+        "volume_weighted_slippage": true,
+        "time_weighted_slippage": false
+      }
+    }
+  },
+  
+  "// 优化范围配置": "用于参数优化和回测的取值范围",
+  "optimization_ranges": {
+    "// 技术指标优化范围": "各个指标参数的合理取值区间",
+    "vatsm_indicators": {
+      "volume_sma_period": [10, 50, 5],
+      "volume_threshold_multiplier": [1.2, 2.5, 0.1],
+      "atr_period": [10, 25, 2],
+      "atr_smoothing_period": [2, 5, 1],
+      "trend_sma_period": [30, 100, 10],
+      "trend_ema_period": [15, 30, 3],
+      "strength_rsi_period": [10, 20, 2],
+      "momentum_period": [10, 20, 2]
+    },
+    
+    "// 信号系统优化范围": "信号生成参数的优化区间",
+    "signal_system": {
+      "volume_threshold": [1.2, 2.0, 0.1],
+      "trend_alignment_tolerance": [0.05, 0.2, 0.05],
+      "strength_min_score": [0.4, 0.8, 0.1],
+      "momentum_min_score": [0.3, 0.7, 0.1],
+      "confluence_required_signals": [2, 4, 1],
+      "confirmation_candles": [1, 5, 1],
+      "signal_timeout_candles": [5, 20, 5]
+    },
+    
+    "// 风险管理优化范围": "风控参数的安全优化区间",
+    "risk_management": {
+      "fixed_stop_pct": [0.01, 0.04, 0.005],
+      "trailing_stop_pct": [0.01, 0.03, 0.005],
+      "atr_multiplier": [1.5, 3.5, 0.5],
+      "max_drawdown_pct": [0.1, 0.25, 0.05],
+      "max_consecutive_losses": [3, 8, 1],
+      "kelly_fraction": [0.1, 0.4, 0.05]
+    },
+    
+    "// 仓位管理优化范围": "仓位分配参数的优化区间",
+    "position_management": {
+      "position_levels.medium.min_pct": [0.02, 0.05, 0.01],
+      "position_levels.medium.max_pct": [0.04, 0.08, 0.01],
+      "atr_risk_multiplier": [1.5, 3.0, 0.5],
+      "max_portfolio_risk": [0.3, 0.7, 0.1]
+    }
+  },
+  
+  "// 回测配置": "历史数据回测的相关设置",
+  "backtest_settings": {
+    "initial_capital": 10000,
+    "fee": 0.001,
+    "slippage": 0.001,
+    "start_date": "2023-01-01",
+    "end_date": "2024-12-31",
+    "timerange": "",
+    "enable_protections": true,
+    "dry_run_wallet": 10000,
+    "stake_amount": "unlimited"
+  },
+  
+  "// 实盘配置": "实际交易时的特殊设置",
+  "live_settings": {
+    "position_adjustment_enable": false,
+    "max_entry_position_adjustment": 1,
+    "order_types": {
+      "entry": "limit",
+      "exit": "limit",
+      "stoploss": "market",
+      "stoploss_on_exchange": true
+    },
+    "unfilledtimeout": {
+      "entry": 10,
+      "exit": 30
+    }
+  }
+}
