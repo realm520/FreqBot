@@ -300,11 +300,26 @@ class EnhancedGridStrategy(GridTradingStrategy):
         self.last_daily_check: Optional[datetime] = None  # 上次日度检查时间
         self.emergency_exit_triggered = False  # 紧急退出标志
         
+        # 初始化性能监控系统
+        try:
+            from freqbot.monitoring.grid_metrics import GridMetrics
+            self.grid_metrics = GridMetrics(
+                strategy_name=f"{self.STRATEGY_NAME}_{metadata.get('pair', 'unknown')}" if hasattr(self, 'metadata') else self.STRATEGY_NAME,
+                max_history=1000
+            )
+            self.monitoring_enabled = True
+            self.logger.info("网格监控系统已启用")
+        except ImportError as e:
+            self.grid_metrics = None
+            self.monitoring_enabled = False
+            self.logger.warning(f"监控系统不可用: {e}")
+        
         # 日志记录
         self.logger.info(f"增强网格策略 {self.STRATEGY_VERSION} 初始化完成")
         self.logger.info(f"动态网格: {self.enable_dynamic_grid.value}")
         self.logger.info(f"市场状态识别: {self.enable_market_regime_detection.value}")
         self.logger.info(f"增强仓位管理: {self.enable_enhanced_position_sizing.value}")
+        self.logger.info(f"性能监控: {self.monitoring_enabled}")
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         """
@@ -336,6 +351,16 @@ class EnhancedGridStrategy(GridTradingStrategy):
             dataframe = self._calculate_market_regime_indicators(dataframe)
             # 执行市场状态识别和平滑处理
             dataframe = self._apply_market_regime_detection(dataframe)
+        
+        # 更新监控指标（使用最新的数据点）
+        if len(dataframe) > 0:
+            try:
+                current_price = dataframe['close'].iloc[-1]
+                current_time = datetime.now()
+                pair = metadata.get('pair', 'unknown')
+                self._update_monitoring_metrics(pair, current_time, current_price)
+            except Exception as e:
+                self.logger.debug(f"监控指标更新失败: {e}")
         
         return dataframe
 
@@ -1675,11 +1700,13 @@ class EnhancedGridStrategy(GridTradingStrategy):
             # 1. 检查交易暂停状态
             if self.trading_paused:
                 self.logger.warning(f"交易已暂停，触发紧急平仓: {pair}")
+                self._record_stop_loss_event()
                 return current_profit - 0.001  # 立即平仓
             
             # 2. 检查紧急平仓条件
             if self.emergency_exit_triggered:
                 self.logger.error(f"紧急平仓触发: {pair}")
+                self._record_stop_loss_event()
                 return current_profit - 0.001  # 立即平仓
             
             # 3. 调用增强止损计算
@@ -1938,6 +1965,15 @@ class EnhancedGridStrategy(GridTradingStrategy):
                 profit_loss = trade.calc_profit_ratio(trade.close_rate or current_profit)
                 self.trade_history.append(profit_loss)
                 
+                # 记录到监控系统
+                self._record_grid_trade({
+                    'side': 'sell' if hasattr(trade, 'is_short') and trade.is_short else 'buy',
+                    'amount': trade.amount,
+                    'price': trade.close_rate or 0.0,
+                    'profit': profit_loss,
+                    'timestamp': current_time
+                })
+                
                 # 更新连续亏损计数
                 if profit_loss < 0:
                     self.consecutive_losses += 1
@@ -2175,3 +2211,179 @@ class EnhancedGridStrategy(GridTradingStrategy):
                 if 'enter_long' in dataframe.columns:
                     dataframe['enter_long'] = 0
                 return dataframe
+    
+    # ===========================================
+    # 性能监控集成方法
+    # ===========================================
+    
+    def _update_monitoring_metrics(self, pair: str, current_time: datetime, current_price: float):
+        """更新监控指标数据
+        
+        Args:
+            pair: 交易对
+            current_time: 当前时间
+            current_price: 当前价格
+        """
+        if not self.monitoring_enabled or not self.grid_metrics:
+            return
+            
+        try:
+            # 更新市场状态监控
+            regime = getattr(self, '_market_regime', 'unknown')
+            volatility = self._get_volatility_level()
+            grid_efficiency = self._calculate_grid_efficiency()
+            
+            self.grid_metrics.update_market_regime(
+                regime=regime,
+                volatility=volatility,
+                efficiency=grid_efficiency
+            )
+            
+            # 更新仓位监控
+            current_balance = self.wallets.get_total_stake_amount() if hasattr(self, 'wallets') else 10000.0
+            max_risk_exposure = current_balance * (self.max_open_trades * 0.1)  # 估算最大风险敞口
+            
+            self.grid_metrics.update_risk_metrics(
+                current_balance=current_balance,
+                max_risk_exposure=max_risk_exposure
+            )
+            
+            # 模拟网格层级（基于当前价格和网格参数）
+            grid_levels = self._get_current_grid_levels(current_price)
+            if grid_levels:
+                self.grid_metrics.update_grid_levels(grid_levels)
+                
+        except Exception as e:
+            self.logger.debug(f"监控指标更新失败: {e}")
+    
+    def _get_volatility_level(self) -> str:
+        """获取当前波动率水平"""
+        try:
+            # 基于ATR或其他波动率指标判断
+            if hasattr(self, '_indicator_cache') and 'atr' in self._indicator_cache:
+                atr_value = self._indicator_cache['atr']
+                if atr_value < 0.01:
+                    return 'low'
+                elif atr_value > 0.05:
+                    return 'high'
+                else:
+                    return 'normal'
+        except:
+            pass
+        return 'normal'
+    
+    def _calculate_grid_efficiency(self) -> float:
+        """计算网格效率百分比"""
+        try:
+            # 基于成交网格数量和总网格数量计算效率
+            if hasattr(self, 'grid_metrics') and self.grid_metrics:
+                metrics = self.grid_metrics.get_current_metrics()
+                if metrics.total_grid_levels > 0:
+                    return (metrics.filled_grid_levels / metrics.total_grid_levels) * 100
+        except:
+            pass
+        return 0.0
+    
+    def _get_current_grid_levels(self, current_price: float) -> List[Dict[str, Any]]:
+        """获取当前网格层级状态
+        
+        Args:
+            current_price: 当前价格
+            
+        Returns:
+            网格层级列表
+        """
+        try:
+            grid_levels = []
+            
+            # 基于网格交易策略的参数生成网格层级
+            grid_spacing = getattr(self, 'grid_spacing', 0.02)
+            num_levels = 10  # 默认10个层级
+            
+            for i in range(-num_levels//2, num_levels//2 + 1):
+                if i == 0:
+                    continue  # 跳过当前价格
+                    
+                level_price = current_price * (1 + i * grid_spacing)
+                side = 'buy' if i < 0 else 'sell'
+                
+                grid_levels.append({
+                    'price': level_price,
+                    'side': side,
+                    'filled': False,  # 需要实际的成交状态
+                    'amount': 0.0
+                })
+                
+            return grid_levels
+            
+        except Exception as e:
+            self.logger.debug(f"获取网格层级失败: {e}")
+            return []
+    
+    def _record_grid_trade(self, trade_data: Dict[str, Any]):
+        """记录网格交易到监控系统
+        
+        Args:
+            trade_data: 交易数据
+        """
+        if not self.monitoring_enabled or not self.grid_metrics:
+            return
+            
+        try:
+            self.grid_metrics.record_trade(trade_data)
+        except Exception as e:
+            self.logger.debug(f"记录交易监控失败: {e}")
+    
+    def _record_position_adjustment(self):
+        """记录仓位调整事件"""
+        if not self.monitoring_enabled or not self.grid_metrics:
+            return
+            
+        try:
+            self.grid_metrics.record_position_adjustment()
+        except Exception as e:
+            self.logger.debug(f"记录仓位调整失败: {e}")
+    
+    def _record_stop_loss_event(self):
+        """记录止损触发事件"""
+        if not self.monitoring_enabled or not self.grid_metrics:
+            return
+            
+        try:
+            self.grid_metrics.record_stop_loss_trigger()
+        except Exception as e:
+            self.logger.debug(f"记录止损事件失败: {e}")
+    
+    def get_monitoring_report(self) -> Optional[str]:
+        """获取监控报告
+        
+        Returns:
+            监控报告字符串，如果监控未启用返回None
+        """
+        if not self.monitoring_enabled or not self.grid_metrics:
+            return None
+            
+        try:
+            return self.grid_metrics.get_summary_report()
+        except Exception as e:
+            self.logger.error(f"生成监控报告失败: {e}")
+            return None
+    
+    def export_monitoring_metrics(self, output_file: str) -> bool:
+        """导出监控指标到文件
+        
+        Args:
+            output_file: 输出文件路径
+            
+        Returns:
+            导出是否成功
+        """
+        if not self.monitoring_enabled or not self.grid_metrics:
+            return False
+            
+        try:
+            self.grid_metrics.export_prometheus_metrics(output_file)
+            return True
+        except Exception as e:
+            self.logger.error(f"导出监控指标失败: {e}")
+            return False

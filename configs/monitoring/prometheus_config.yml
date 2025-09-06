@@ -1,0 +1,41 @@
+# FreqBot 网格策略 Prometheus 监控配置
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "grid_strategy_rules.yml"
+
+scrape_configs:
+  # FreqBot 主要指标
+  - job_name: 'freqbot-grid-strategy'
+    static_configs:
+      - targets: ['localhost:8080']  # FreqBot 指标导出端点
+    scrape_interval: 5s
+    metrics_path: /metrics
+    params:
+      strategy: ['EnhancedGridStrategy']
+    
+  # 系统资源监控
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['localhost:9100']
+    scrape_interval: 10s
+
+  # Docker 容器监控 (如果使用 Docker 部署)
+  - job_name: 'docker-containers'
+    static_configs:
+      - targets: ['localhost:9323']
+    scrape_interval: 10s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - localhost:9093
+
+# 数据保留策略
+storage:
+  retention.time: "15d"  # 保留15天的数据
+  retention.size: "10GB"  # 最大存储10GB

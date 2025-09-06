@@ -1,0 +1,133 @@
+# FreqBot 网格策略告警规则
+
+groups:
+  - name: grid_strategy_alerts
+    rules:
+      # 高回撤告警
+      - alert: HighDrawdown
+        expr: current_drawdown_EnhancedGridStrategy > 15
+        for: 1m
+        labels:
+          severity: warning
+          strategy: "{{ $labels.strategy }}"
+        annotations:
+          summary: "网格策略回撤过高"
+          description: "策略 {{ $labels.strategy }} 当前回撤为 {{ $value }}%，超过15%警戒线"
+      
+      # 极高回撤告警  
+      - alert: CriticalDrawdown
+        expr: current_drawdown_EnhancedGridStrategy > 25
+        for: 30s
+        labels:
+          severity: critical
+          strategy: "{{ $labels.strategy }}"
+        annotations:
+          summary: "网格策略回撤危险"
+          description: "策略 {{ $labels.strategy }} 当前回撤为 {{ $value }}%，超过25%危险线，需要立即干预"
+
+      # 连续止损告警
+      - alert: FrequentStopLoss
+        expr: increase(stop_loss_triggers_EnhancedGridStrategy[1h]) >= 3
+        for: 1m
+        labels:
+          severity: warning
+          strategy: "{{ $labels.strategy }}"
+        annotations:
+          summary: "频繁止损触发"
+          description: "策略 {{ $labels.strategy }} 在过去1小时内触发了 {{ $value }} 次止损"
+
+      # 胜率过低告警
+      - alert: LowWinRate
+        expr: grid_win_rate_EnhancedGridStrategy < 40 and grid_trades_total_EnhancedGridStrategy > 10
+        for: 5m
+        labels:
+          severity: warning
+          strategy: "{{ $labels.strategy }}"
+        annotations:
+          summary: "策略胜率过低"
+          description: "策略 {{ $labels.strategy }} 胜率为 {{ $value }}%，低于40%阈值"
+
+      # 网格效率过低告警
+      - alert: LowGridEfficiency
+        expr: grid_efficiency_EnhancedGridStrategy < 30
+        for: 5m
+        labels:
+          severity: info
+          strategy: "{{ $labels.strategy }}"
+        annotations:
+          summary: "网格效率偏低"
+          description: "策略 {{ $labels.strategy }} 网格效率为 {{ $value }}%，可能需要调整网格参数"
+
+      # 仓位利用率过高告警
+      - alert: HighPositionUtilization
+        expr: position_utilization_EnhancedGridStrategy > 90
+        for: 2m
+        labels:
+          severity: warning
+          strategy: "{{ $labels.strategy }}"
+        annotations:
+          summary: "仓位利用率过高"
+          description: "策略 {{ $labels.strategy }} 仓位利用率为 {{ $value }}%，接近满仓状态"
+
+      # 夏普比率过低告警
+      - alert: PoorSharpeRatio
+        expr: sharpe_ratio_EnhancedGridStrategy < 0.5 and grid_trades_total_EnhancedGridStrategy > 20
+        for: 10m
+        labels:
+          severity: info
+          strategy: "{{ $labels.strategy }}"
+        annotations:
+          summary: "夏普比率偏低"
+          description: "策略 {{ $labels.strategy }} 夏普比率为 {{ $value }}，风险调整后收益偏低"
+
+      # 长时间无交易告警
+      - alert: NoTradingActivity
+        expr: increase(grid_trades_total_EnhancedGridStrategy[2h]) == 0
+        for: 30m
+        labels:
+          severity: info
+          strategy: "{{ $labels.strategy }}"
+        annotations:
+          summary: "长时间无交易活动"
+          description: "策略 {{ $labels.strategy }} 已超过2小时无交易活动，请检查市场状况和策略参数"
+
+      # 监控数据缺失告警
+      - alert: MonitoringDataMissing
+        expr: up{job="freqbot-grid-strategy"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: "freqbot-monitoring"
+        annotations:
+          summary: "FreqBot监控数据缺失"
+          description: "FreqBot策略监控数据无法获取，可能是服务停止或网络问题"
+
+  - name: system_alerts
+    rules:
+      # 系统资源告警
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU使用率过高"
+          description: "主机 {{ $labels.instance }} CPU使用率为 {{ $value }}%"
+
+      - alert: HighMemoryUsage  
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "内存使用率过高"
+          description: "主机 {{ $labels.instance }} 内存使用率为 {{ $value }}%"
+
+      - alert: LowDiskSpace
+        expr: (1 - (node_filesystem_free_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 85
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "磁盘空间不足"
+          description: "主机 {{ $labels.instance }} 磁盘使用率为 {{ $value }}%"
