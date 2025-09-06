@@ -6,12 +6,9 @@ branch: epic/strategy-21
 # Execution Status
 
 ## Ready Tasks (可立即开始)
-- Issue #5: 仓位管理优化 (依赖#4已完成)
-- Issue #6: 风控系统集成 (依赖#2已完成)
-- Issue #9: 性能监控面板 (依赖#7已完成)
+- Issue #8: 回测验证脚本 (依赖#3,#4,#5,#6已完成)
 
 ## Blocked Tasks (等待依赖)
-- Issue #8: 回测验证脚本 (等待 #5,#6)
 - Issue #10: 集成测试套件 (等待 #8)
 - Issue #11: 文档与部署 (等待 #10)
 
