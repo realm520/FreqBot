@@ -217,6 +217,8 @@ class EnhancedGridStrategy(GridTradingStrategy):
         # 如果启用动态网格，计算动态网格指标
         if self.enable_dynamic_grid.value:
             dataframe = self._calculate_dynamic_grid_indicators(dataframe)
+            # 计算动态网格层级
+            dataframe = self.calculate_dynamic_grid_levels(dataframe)
         
         # 如果启用市场状态识别，添加状态识别指标
         if self.enable_market_regime_detection.value:
@@ -364,14 +366,359 @@ class EnhancedGridStrategy(GridTradingStrategy):
         return dataframe
 
     # ===========================================
+    # 动态网格核心算法实现
+    # ===========================================
+    
+    def _calculate_adaptive_grid_spacing(self, dataframe: DataFrame) -> float:
+        """
+        基于ATR计算自适应网格间距
+        
+        算法：
+        1. 获取当前ATR值和ATR百分比
+        2. 基于波动率调整间距系数
+        3. 应用最小/最大间距限制
+        4. 考虑网格调整敏感度
+        
+        Args:
+            dataframe: K线数据
+            
+        Returns:
+            float: 自适应网格间距（价格百分比）
+        """
+        try:
+            # 获取最新ATR相关指标
+            current_atr_pct = dataframe['atr_percent'].iloc[-1]
+            current_price = dataframe['close'].iloc[-1]
+            
+            # 基础间距 = ATR百分比 * 调整系数
+            base_spacing_pct = current_atr_pct * self.grid_adjustment_sensitivity.value
+            
+            # 波动率自适应调整
+            # 使用realized_volatility进行二次调整
+            if 'realized_volatility' in dataframe.columns:
+                current_vol = dataframe['realized_volatility'].iloc[-1]
+                vol_avg = dataframe['realized_volatility'].rolling(window=50).mean().iloc[-1]
+                
+                if not np.isnan(vol_avg) and vol_avg > 0:
+                    vol_factor = min(2.0, max(0.5, current_vol / vol_avg))
+                    base_spacing_pct *= vol_factor
+            
+            # 应用间距边界限制
+            adaptive_spacing = max(
+                self.min_grid_spacing_pct.value,
+                min(base_spacing_pct, self.max_grid_spacing_pct.value)
+            )
+            
+            self.logger.debug(f"ATR自适应间距: {adaptive_spacing:.4f} (ATR%: {current_atr_pct:.4f})")
+            return adaptive_spacing
+            
+        except Exception as e:
+            self.logger.error(f"ATR间距计算错误: {e}")
+            # 返回默认间距
+            return (self.min_grid_spacing_pct.value + self.max_grid_spacing_pct.value) / 2
+    
+    def _calculate_dynamic_boundaries(self, dataframe: DataFrame) -> tuple:
+        """
+        基于布林带计算动态网格边界
+        
+        算法：
+        1. 获取布林带上下轨
+        2. 应用边界扩展系数
+        3. 确保边界合理性
+        4. 防止边界过度扩张
+        
+        Args:
+            dataframe: K线数据
+            
+        Returns:
+            tuple: (下边界价格, 上边界价格)
+        """
+        try:
+            # 获取最新布林带数据
+            bb_lower = dataframe['bb_lowerband'].iloc[-1]
+            bb_upper = dataframe['bb_upperband'].iloc[-1] 
+            bb_middle = dataframe['bb_middleband'].iloc[-1]
+            current_price = dataframe['close'].iloc[-1]
+            
+            # 计算布林带宽度
+            bb_width_pct = (bb_upper - bb_lower) / bb_middle if bb_middle > 0 else 0.1
+            
+            # 动态边界扩展系数 - 基于布林带宽度调整
+            base_expansion = 0.02  # 基础2%扩展
+            if bb_width_pct > 0.15:  # 高波动
+                expansion_factor = 0.01  # 减少扩展
+            elif bb_width_pct < 0.05:  # 低波动
+                expansion_factor = 0.03  # 增加扩展
+            else:  # 中等波动
+                expansion_factor = base_expansion
+            
+            # 计算动态边界
+            lower_bound = bb_lower * (1 - expansion_factor)
+            upper_bound = bb_upper * (1 + expansion_factor)
+            
+            # 边界合理性检查
+            if lower_bound >= upper_bound or lower_bound <= 0:
+                self.logger.warning("边界计算异常，使用默认边界")
+                price_range_pct = 0.10  # 默认10%价格区间
+                lower_bound = current_price * (1 - price_range_pct / 2)
+                upper_bound = current_price * (1 + price_range_pct / 2)
+            
+            self.logger.debug(f"动态边界: [{lower_bound:.4f}, {upper_bound:.4f}], 宽度: {(upper_bound-lower_bound)/current_price:.4f}")
+            return lower_bound, upper_bound
+            
+        except Exception as e:
+            self.logger.error(f"边界计算错误: {e}")
+            # 返回基于当前价格的默认边界
+            current_price = dataframe['close'].iloc[-1] if len(dataframe) > 0 else 100.0
+            return current_price * 0.95, current_price * 1.05
+    
+    def _generate_grid_levels(self, dataframe: DataFrame, lower_bound: float, 
+                            upper_bound: float, spacing: float) -> dict:
+        """
+        生成20层固定网格结构
+        
+        算法：
+        1. 均匀分布20个网格层级
+        2. 计算每层的目标价位
+        3. 分配买入/卖出网格
+        4. 记录网格元数据
+        
+        Args:
+            dataframe: K线数据
+            lower_bound: 网格下边界
+            upper_bound: 网格上边界  
+            spacing: 网格间距参考值
+            
+        Returns:
+            dict: 网格层级数据
+        """
+        try:
+            current_price = dataframe['close'].iloc[-1]
+            grid_levels = 20  # 固定20层网格
+            
+            # 计算网格间距
+            total_range = upper_bound - lower_bound
+            level_spacing = total_range / (grid_levels - 1)
+            
+            # 生成网格层级
+            buy_levels = []
+            sell_levels = []
+            
+            for i in range(grid_levels):
+                level_price = lower_bound + (i * level_spacing)
+                level_info = {
+                    'level': i,
+                    'price': level_price,
+                    'distance_pct': (level_price - current_price) / current_price,
+                    'spacing': spacing,
+                    'timestamp': datetime.now(timezone.utc).isoformat()
+                }
+                
+                # 分配买入/卖出网格 - 基于相对于当前价格的位置
+                if level_price < current_price:
+                    # 价格下方为买入网格
+                    level_info['type'] = 'buy'
+                    level_info['side'] = 'long_entry'
+                    buy_levels.append(level_info)
+                elif level_price > current_price:
+                    # 价格上方为卖出网格
+                    level_info['type'] = 'sell'  
+                    level_info['side'] = 'long_exit'
+                    sell_levels.append(level_info)
+                else:
+                    # 接近当前价格的中性网格
+                    level_info['type'] = 'neutral'
+                    level_info['side'] = 'hold'
+            
+            grid_data = {
+                'total_levels': grid_levels,
+                'buy_levels': buy_levels,
+                'sell_levels': sell_levels,
+                'price_range': (lower_bound, upper_bound),
+                'level_spacing': level_spacing,
+                'adaptive_spacing': spacing,
+                'current_price': current_price,
+                'created_at': datetime.now(timezone.utc).isoformat()
+            }
+            
+            self.logger.info(f"生成动态网格: {len(buy_levels)}买入层 + {len(sell_levels)}卖出层, 间距: {level_spacing:.4f}")
+            return grid_data
+            
+        except Exception as e:
+            self.logger.error(f"网格层级生成错误: {e}")
+            return {}
+    
+    def _add_grid_indicators(self, dataframe: DataFrame, grid_data: dict) -> DataFrame:
+        """
+        添加网格相关指标到数据框
+        
+        Args:
+            dataframe: K线数据
+            grid_data: 网格层级数据
+            
+        Returns:
+            DataFrame: 包含网格指标的数据框
+        """
+        try:
+            if not grid_data:
+                return dataframe
+                
+            # 添加网格边界指标
+            lower_bound, upper_bound = grid_data['price_range']
+            dataframe['grid_lower_bound'] = lower_bound
+            dataframe['grid_upper_bound'] = upper_bound
+            dataframe['grid_level_spacing'] = grid_data['level_spacing']
+            dataframe['grid_adaptive_spacing'] = grid_data['adaptive_spacing']
+            
+            # 计算当前价格在网格中的位置
+            current_price = grid_data['current_price']
+            grid_position = (current_price - lower_bound) / (upper_bound - lower_bound)
+            dataframe['grid_position'] = grid_position
+            
+            # 计算距离最近网格层的距离
+            buy_levels = grid_data.get('buy_levels', [])
+            sell_levels = grid_data.get('sell_levels', [])
+            
+            if buy_levels:
+                nearest_buy_distance = min([
+                    abs(level['price'] - current_price) / current_price 
+                    for level in buy_levels
+                ])
+                dataframe['nearest_buy_grid_distance'] = nearest_buy_distance
+            
+            if sell_levels:
+                nearest_sell_distance = min([
+                    abs(level['price'] - current_price) / current_price 
+                    for level in sell_levels
+                ])
+                dataframe['nearest_sell_grid_distance'] = nearest_sell_distance
+            
+            # 网格状态指标
+            dataframe['grid_total_levels'] = grid_data['total_levels']
+            dataframe['grid_buy_levels_count'] = len(buy_levels)
+            dataframe['grid_sell_levels_count'] = len(sell_levels)
+            
+            return dataframe
+            
+        except Exception as e:
+            self.logger.error(f"网格指标添加错误: {e}")
+            return dataframe
+    
+    def _should_reset_grid(self, dataframe: DataFrame) -> bool:
+        """
+        判断是否需要重置网格
+        
+        重置条件：
+        1. 价格突破网格边界
+        2. ATR波动率显著变化
+        3. 布林带宽度剧烈变化
+        4. 网格计算时间过长
+        
+        Args:
+            dataframe: K线数据
+            
+        Returns:
+            bool: 是否需要重置网格
+        """
+        try:
+            if len(dataframe) < 20:
+                return False
+                
+            current_price = dataframe['close'].iloc[-1]
+            
+            # 检查价格是否突破网格边界
+            if 'grid_lower_bound' in dataframe.columns and 'grid_upper_bound' in dataframe.columns:
+                grid_lower = dataframe['grid_lower_bound'].iloc[-1]
+                grid_upper = dataframe['grid_upper_bound'].iloc[-1]
+                
+                # 价格突破边界的阈值
+                boundary_threshold = 0.02  # 2%
+                if current_price < grid_lower * (1 - boundary_threshold):
+                    self.logger.info(f"价格突破下边界 {current_price} < {grid_lower * (1 - boundary_threshold)}")
+                    return True
+                if current_price > grid_upper * (1 + boundary_threshold):
+                    self.logger.info(f"价格突破上边界 {current_price} > {grid_upper * (1 + boundary_threshold)}")
+                    return True
+            
+            # 检查ATR波动率变化
+            if 'atr_percent' in dataframe.columns:
+                current_atr = dataframe['atr_percent'].iloc[-1]
+                avg_atr = dataframe['atr_percent'].rolling(window=20).mean().iloc[-1]
+                
+                if not np.isnan(avg_atr) and avg_atr > 0:
+                    atr_change_ratio = abs(current_atr - avg_atr) / avg_atr
+                    if atr_change_ratio > 0.5:  # ATR变化超过50%
+                        self.logger.info(f"ATR波动率显著变化: {atr_change_ratio:.3f}")
+                        return True
+            
+            # 检查布林带宽度变化
+            if 'bb_width' in dataframe.columns:
+                current_bb_width = dataframe['bb_width'].iloc[-1]
+                avg_bb_width = dataframe['bb_width'].rolling(window=20).mean().iloc[-1]
+                
+                if not np.isnan(avg_bb_width) and avg_bb_width > 0:
+                    bb_width_change_ratio = abs(current_bb_width - avg_bb_width) / avg_bb_width
+                    if bb_width_change_ratio > 0.4:  # 布林带宽度变化超过40%
+                        self.logger.info(f"布林带宽度显著变化: {bb_width_change_ratio:.3f}")
+                        return True
+            
+            # 时间相关重置 - 如果网格创建时间过长
+            # 这里暂时不实现，后续可以基于网格创建时间戳来判断
+            
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"网格重置条件判断错误: {e}")
+            return False
+    
+    def _reset_grid_cache(self, dataframe: DataFrame) -> DataFrame:
+        """
+        重置网格缓存和状态
+        
+        Args:
+            dataframe: K线数据
+            
+        Returns:
+            DataFrame: 重置后的数据框
+        """
+        try:
+            # 清理网格相关指标
+            grid_columns = [
+                'grid_lower_bound', 'grid_upper_bound', 'grid_level_spacing',
+                'grid_adaptive_spacing', 'grid_position', 'nearest_buy_grid_distance',
+                'nearest_sell_grid_distance', 'grid_total_levels', 
+                'grid_buy_levels_count', 'grid_sell_levels_count'
+            ]
+            
+            for col in grid_columns:
+                if col in dataframe.columns:
+                    dataframe[col] = np.nan
+            
+            # 清理缓存状态
+            self._indicator_cache.clear()
+            self._last_update_time = datetime.now(timezone.utc)
+            
+            # 注意：这里不能直接调用calculate_dynamic_grid_levels，避免递归
+            # 重置完成，返回清理后的数据框
+            return dataframe
+            
+        except Exception as e:
+            self.logger.error(f"网格缓存重置错误: {e}")
+            return dataframe
+
+    # ===========================================
     # 预留接口方法（为后续任务准备）
     # ===========================================
 
     def calculate_dynamic_grid_levels(self, dataframe: DataFrame) -> DataFrame:
         """
-        动态网格层级计算（预留接口）
+        动态网格层级计算 - ATR自适应网格间距和布林带区间确定
         
-        此方法将在后续任务中实现具体的动态网格计算逻辑
+        核心功能：
+        1. 基于ATR计算自适应网格间距
+        2. 使用布林带上下轨确定价格区间
+        3. 固定20层网格结构，智能分布价位
+        4. 实现网格重置机制
         
         Args:
             dataframe: K线数据
@@ -379,8 +726,46 @@ class EnhancedGridStrategy(GridTradingStrategy):
         Returns:
             DataFrame: 包含动态网格层级的数据框
         """
-        # 当前实现：简单复制父类逻辑，后续将增强
-        return super().calculate_grid_levels(dataframe)
+        if len(dataframe) == 0:
+            self.logger.warning("数据框为空，返回空网格")
+            return dataframe
+            
+        # 确保必需指标存在
+        required_indicators = ['atr', 'bb_lowerband', 'bb_upperband', 'bb_middleband', 'close']
+        for indicator in required_indicators:
+            if indicator not in dataframe.columns:
+                self.logger.error(f"缺少必需指标: {indicator}")
+                return super().calculate_grid_levels(dataframe)
+        
+        try:
+            # 计算ATR自适应网格间距
+            adaptive_spacing = self._calculate_adaptive_grid_spacing(dataframe)
+            
+            # 获取布林带动态边界
+            lower_bound, upper_bound = self._calculate_dynamic_boundaries(dataframe)
+            
+            # 生成20层固定网格
+            grid_levels_data = self._generate_grid_levels(
+                dataframe, lower_bound, upper_bound, adaptive_spacing
+            )
+            
+            # 添加网格相关指标到数据框
+            dataframe = self._add_grid_indicators(dataframe, grid_levels_data)
+            
+            # 检查是否需要重置网格
+            if self._should_reset_grid(dataframe):
+                self.logger.info("触发网格重置条件，清理网格缓存")
+                # 只是清理缓存，不再递归调用
+                self._indicator_cache.clear()
+                self._last_update_time = datetime.now(timezone.utc)
+            
+            return dataframe
+            
+        except Exception as e:
+            self.logger.error(f"动态网格计算出错: {e}")
+            # 降级到父类基础实现
+            return super().calculate_grid_levels(dataframe)
+
 
     def detect_market_regime(self, dataframe: DataFrame) -> str:
         """
