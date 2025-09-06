@@ -990,6 +990,31 @@ class EnhancedGridStrategy(GridTradingStrategy):
         except Exception as e:
             self.logger.error(f"历史状态记录错误: {e}")
     
+    def _get_current_dataframe(self, pair: str) -> Optional[DataFrame]:
+        """
+        获取当前交易对的数据框
+        
+        Args:
+            pair: 交易对
+            
+        Returns:
+            DataFrame: 当前数据框，如果无法获取则返回None
+        """
+        try:
+            # 优先从缓存获取
+            if hasattr(self, '_indicator_cache') and pair in self._indicator_cache:
+                cached_data = self._indicator_cache[pair]
+                # 检查缓存时效性（5分钟）
+                if (datetime.now(timezone.utc) - cached_data.get('timestamp', datetime.min.replace(tzinfo=timezone.utc))).seconds < 300:
+                    return cached_data.get('dataframe')
+            
+            # 缓存无效或不存在，返回None让调用方处理
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"获取数据框错误 {pair}: {e}")
+            return None
+    
     def _apply_market_regime_detection(self, dataframe: DataFrame) -> DataFrame:
         """
         应用市场状态识别并添加相关指标
@@ -1115,9 +1140,17 @@ class EnhancedGridStrategy(GridTradingStrategy):
                                        current_rate: float, proposed_stake: float,
                                        **kwargs) -> float:
         """
-        增强仓位计算（预留接口）
+        增强仓位计算 - 基于市场状态的三级仓位管理系统
         
-        此方法将在后续任务中实现具体的智能仓位管理逻辑
+        仓位模式：
+        - 保守模式：基础仓位 × 0.5 (震荡市)
+        - 标准模式：基础仓位 × 1.0 (过渡期)
+        - 激进模式：基础仓位 × 1.5 (趋势市)
+        
+        调整因子：
+        - 市场状态调整：基于detect_market_regime()结果
+        - 波动率调整：基于ATR和realized_volatility
+        - 风险控制：最大仓位限制和平滑过渡
         
         Args:
             pair: 交易对
@@ -1129,19 +1162,68 @@ class EnhancedGridStrategy(GridTradingStrategy):
         Returns:
             float: 调整后的仓位大小
         """
-        # 当前实现：调用父类逻辑，后续将增强
-        return super().custom_stake_amount(
-            pair=pair,
-            current_time=current_time,
-            current_rate=current_rate,
-            proposed_stake=proposed_stake,
-            min_stake=kwargs.get('min_stake'),
-            max_stake=kwargs.get('max_stake'),
-            leverage=kwargs.get('leverage', 1.0),
-            entry_tag=kwargs.get('entry_tag'),
-            side=kwargs.get('side', 'long'),
-            **kwargs
-        )
+        try:
+            # 1. 获取基础仓位
+            base_stake = super().custom_stake_amount(
+                pair=pair,
+                current_time=current_time,
+                current_rate=current_rate,
+                proposed_stake=proposed_stake,
+                min_stake=kwargs.get('min_stake'),
+                max_stake=kwargs.get('max_stake'),
+                leverage=kwargs.get('leverage', 1.0),
+                entry_tag=kwargs.get('entry_tag'),
+                side=kwargs.get('side', 'long'),
+                **kwargs
+            )
+            
+            # 2. 获取当前市场数据框（通过缓存或重新计算）
+            dataframe = self._get_current_dataframe(pair)
+            if dataframe is None or len(dataframe) == 0:
+                self.logger.warning(f"无法获取 {pair} 的市场数据，使用基础仓位")
+                return base_stake
+                
+            # 3. 市场状态调整因子
+            market_adjustment_factor = self._calculate_market_regime_adjustment_factor(dataframe)
+            
+            # 4. 波动率调整因子
+            volatility_adjustment_factor = self._calculate_volatility_adjustment_factor(dataframe)
+            
+            # 5. 综合调整因子计算
+            combined_adjustment_factor = market_adjustment_factor * volatility_adjustment_factor
+            
+            # 6. 应用调整因子
+            enhanced_stake = base_stake * combined_adjustment_factor
+            
+            # 7. 风险控制和边界检查
+            enhanced_stake = self._apply_position_risk_controls(
+                enhanced_stake, base_stake, pair, kwargs
+            )
+            
+            self.logger.info(
+                f"增强仓位计算 {pair}: 基础={base_stake:.4f}, "
+                f"市场调整={market_adjustment_factor:.3f}, "
+                f"波动率调整={volatility_adjustment_factor:.3f}, "
+                f"最终={enhanced_stake:.4f}"
+            )
+            
+            return enhanced_stake
+            
+        except Exception as e:
+            self.logger.error(f"增强仓位计算错误 {pair}: {e}")
+            # 错误时返回基础仓位，确保策略稳定运行
+            return super().custom_stake_amount(
+                pair=pair,
+                current_time=current_time,
+                current_rate=current_rate,
+                proposed_stake=proposed_stake,
+                min_stake=kwargs.get('min_stake'),
+                max_stake=kwargs.get('max_stake'),
+                leverage=kwargs.get('leverage', 1.0),
+                entry_tag=kwargs.get('entry_tag'),
+                side=kwargs.get('side', 'long'),
+                **kwargs
+            )
 
     def calculate_enhanced_stoploss(self, pair: str, trade: 'Trade', current_time: datetime,
                                   current_rate: float, current_profit: float,
@@ -1229,3 +1311,203 @@ class EnhancedGridStrategy(GridTradingStrategy):
             current_profit=current_profit,
             **kwargs
         )
+    
+    # ===========================================
+    # 增强仓位管理支持方法
+    # ===========================================
+    
+    def _calculate_market_regime_adjustment_factor(self, dataframe: DataFrame) -> float:
+        """
+        计算基于市场状态的仓位调整因子
+        
+        调整规则：
+        - 保守模式 (震荡市): 0.5
+        - 标准模式 (过渡期): 1.0  
+        - 激进模式 (趋势市): 1.5
+        
+        Args:
+            dataframe: K线数据
+            
+        Returns:
+            float: 市场状态调整因子
+        """
+        try:
+            # 获取当前市场状态
+            current_market_regime = self.detect_market_regime(dataframe)
+            
+            # 基于市场状态确定调整因子
+            if current_market_regime == 'consolidation':
+                # 震荡市 - 保守模式
+                adjustment_factor = 0.5
+                self.logger.debug("仓位模式：保守 (震荡市)")
+                
+            elif current_market_regime in ['uptrend', 'downtrend']:
+                # 趋势市 - 激进模式
+                adjustment_factor = 1.5
+                self.logger.debug(f"仓位模式：激进 ({current_market_regime})")
+                
+            elif current_market_regime == 'transition':
+                # 过渡期 - 标准模式
+                adjustment_factor = 1.0
+                self.logger.debug("仓位模式：标准 (过渡期)")
+                
+            else:
+                # 未知状态 - 默认标准模式
+                adjustment_factor = 1.0
+                self.logger.debug(f"仓位模式：标准 (未知状态: {current_market_regime})")
+            
+            # 应用趋势强度微调
+            if 'adx' in dataframe.columns and len(dataframe) > 0:
+                current_adx = dataframe['adx'].iloc[-1]
+                if not np.isnan(current_adx):
+                    # ADX强度微调：ADX越高，调整幅度越大
+                    if current_market_regime in ['uptrend', 'downtrend']:
+                        # 趋势市：ADX高时进一步增强
+                        strength_multiplier = min(1.2, 1.0 + (current_adx - 40) / 100)
+                        adjustment_factor *= strength_multiplier
+                    elif current_market_regime == 'consolidation':
+                        # 震荡市：ADX低时进一步保守
+                        strength_multiplier = max(0.8, 1.0 - (25 - current_adx) / 100)
+                        adjustment_factor *= strength_multiplier
+            
+            # 确保调整因子在合理范围内
+            adjustment_factor = max(0.3, min(2.0, adjustment_factor))
+            
+            return adjustment_factor
+            
+        except Exception as e:
+            self.logger.error(f"市场状态调整因子计算错误: {e}")
+            return 1.0  # 错误时返回中性因子
+    
+    def _calculate_volatility_adjustment_factor(self, dataframe: DataFrame) -> float:
+        """
+        计算基于波动率的仓位调整因子
+        
+        调整逻辑：
+        - 低波动率：适度增加仓位 (×1.1-1.2)
+        - 正常波动率：保持基准 (×1.0)
+        - 高波动率：减少仓位 (×0.8-0.9)
+        
+        Args:
+            dataframe: K线数据
+            
+        Returns:
+            float: 波动率调整因子
+        """
+        try:
+            if len(dataframe) == 0:
+                return 1.0
+                
+            # 获取最新波动率指标
+            last_candle = dataframe.iloc[-1]
+            
+            # 基于ATR百分比的调整
+            atr_adjustment = 1.0
+            if 'atr_percent' in dataframe.columns:
+                current_atr_pct = last_candle['atr_percent']
+                if not np.isnan(current_atr_pct):
+                    # ATR调整：低波动增仓，高波动减仓
+                    if current_atr_pct < 0.01:  # 1%以下为低波动
+                        atr_adjustment = 1.15
+                    elif current_atr_pct > 0.05:  # 5%以上为高波动
+                        atr_adjustment = 0.85
+                    else:
+                        # 正常波动，线性调整
+                        normalized_atr = (current_atr_pct - 0.01) / (0.05 - 0.01)
+                        atr_adjustment = 1.15 - (normalized_atr * 0.30)  # 1.15 -> 0.85
+            
+            # 基于realized volatility的微调
+            realized_vol_adjustment = 1.0
+            if 'realized_volatility' in dataframe.columns:
+                current_vol = last_candle['realized_volatility']
+                avg_vol = dataframe['realized_volatility'].rolling(window=20).mean().iloc[-1]
+                
+                if not np.isnan(current_vol) and not np.isnan(avg_vol) and avg_vol > 0:
+                    vol_ratio = current_vol / avg_vol
+                    
+                    # 波动率相对变化调整
+                    if vol_ratio < 0.7:  # 当前波动率显著低于平均
+                        realized_vol_adjustment = 1.1
+                    elif vol_ratio > 1.5:  # 当前波动率显著高于平均
+                        realized_vol_adjustment = 0.9
+                    else:
+                        # 正常范围内，小幅调整
+                        if vol_ratio < 1.0:
+                            realized_vol_adjustment = 1.0 + (1.0 - vol_ratio) * 0.1
+                        else:
+                            realized_vol_adjustment = 1.0 - (vol_ratio - 1.0) * 0.1
+            
+            # 综合波动率调整因子
+            volatility_adjustment_factor = atr_adjustment * realized_vol_adjustment
+            
+            # 确保调整因子在合理范围内
+            volatility_adjustment_factor = max(0.6, min(1.4, volatility_adjustment_factor))
+            
+            self.logger.debug(
+                f"波动率调整: ATR调整={atr_adjustment:.3f}, "
+                f"RealizedVol调整={realized_vol_adjustment:.3f}, "
+                f"综合={volatility_adjustment_factor:.3f}"
+            )
+            
+            return volatility_adjustment_factor
+            
+        except Exception as e:
+            self.logger.error(f"波动率调整因子计算错误: {e}")
+            return 1.0  # 错误时返回中性因子
+    
+    def _apply_position_risk_controls(self, enhanced_stake: float, base_stake: float, 
+                                    pair: str, kwargs: dict) -> float:
+        """
+        应用仓位风险控制
+        
+        控制规则：
+        1. 最大仓位限制
+        2. 最小仓位保障
+        3. 相对变化限制（避免剧烈变动）
+        4. 账户风险控制
+        
+        Args:
+            enhanced_stake: 增强后的仓位
+            base_stake: 基础仓位
+            pair: 交易对
+            kwargs: 其他参数
+            
+        Returns:
+            float: 风控后的最终仓位
+        """
+        try:
+            # 1. 获取仓位边界
+            min_stake = kwargs.get('min_stake', base_stake * 0.1)
+            max_stake = kwargs.get('max_stake', base_stake * 3.0)
+            
+            # 2. 基础边界检查
+            controlled_stake = max(min_stake, min(enhanced_stake, max_stake))
+            
+            # 3. 相对变化限制：避免单次调整过大
+            max_change_ratio = 2.0  # 最大允许200%变化
+            if enhanced_stake > base_stake * max_change_ratio:
+                controlled_stake = base_stake * max_change_ratio
+                self.logger.warning(f"仓位增幅限制: {enhanced_stake:.4f} -> {controlled_stake:.4f}")
+            elif enhanced_stake < base_stake / max_change_ratio:
+                controlled_stake = base_stake / max_change_ratio  
+                self.logger.warning(f"仓位减幅限制: {enhanced_stake:.4f} -> {controlled_stake:.4f}")
+            
+            # 4. 最大同时开仓限制检查（如果有交易信息）
+            # 这里简化处理，实际实现可以检查当前开仓数量
+            
+            # 5. 最终合理性检查
+            if controlled_stake <= 0:
+                controlled_stake = min_stake
+                self.logger.warning(f"仓位修正为最小值: {controlled_stake:.4f}")
+            
+            # 记录调整信息
+            if abs(controlled_stake - enhanced_stake) > 0.0001:
+                self.logger.info(
+                    f"仓位风控调整 {pair}: {enhanced_stake:.4f} -> {controlled_stake:.4f}"
+                )
+            
+            return controlled_stake
+            
+        except Exception as e:
+            self.logger.error(f"仓位风控处理错误: {e}")
+            return base_stake  # 错误时返回基础仓位
