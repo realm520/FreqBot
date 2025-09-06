@@ -138,11 +138,31 @@ class EnhancedGridStrategy(GridTradingStrategy):
     # 市场状态识别参数
     # ===========================================
     
-    # 趋势识别阈值
-    trend_detection_threshold = DecimalParameter(
-        low=20, high=40, default=28, 
+    # ADX趋势识别阈值
+    adx_consolidation_threshold = DecimalParameter(
+        low=20, high=30, default=25, 
         space="buy", optimize=True, load=True,
-        description="ADX趋势强度识别阈值"
+        description="ADX震荡市识别阈值 (<25为震荡)"
+    )
+    
+    adx_trend_threshold = DecimalParameter(
+        low=35, high=50, default=40, 
+        space="buy", optimize=True, load=True,
+        description="ADX趋势市识别阈值 (>40为强趋势)"
+    )
+    
+    # 状态平滑参数
+    regime_smoothing_period = IntParameter(
+        low=3, high=10, default=5, 
+        space="buy", optimize=False, load=True,
+        description="市场状态平滑周期，避免频繁切换"
+    )
+    
+    # 趋势方向确认阈值
+    di_ratio_threshold = DecimalParameter(
+        low=1.1, high=1.5, default=1.2, 
+        space="buy", optimize=True, load=True,
+        description="DI指标比例阈值，确认趋势方向"
     )
     
     # 震荡市场识别参数
@@ -189,6 +209,10 @@ class EnhancedGridStrategy(GridTradingStrategy):
         self._indicator_cache: Dict[str, Any] = {}
         self._last_update_time: Optional[datetime] = None
         
+        # 市场状态历史记录
+        self._regime_history: list = []  # 存储历史状态用于分析
+        self._regime_change_count: int = 0  # 状态切换计数
+        
         # 日志记录
         self.logger.info(f"增强网格策略 {self.STRATEGY_VERSION} 初始化完成")
         self.logger.info(f"动态网格: {self.enable_dynamic_grid.value}")
@@ -223,6 +247,8 @@ class EnhancedGridStrategy(GridTradingStrategy):
         # 如果启用市场状态识别，添加状态识别指标
         if self.enable_market_regime_detection.value:
             dataframe = self._calculate_market_regime_indicators(dataframe)
+            # 执行市场状态识别和平滑处理
+            dataframe = self._apply_market_regime_detection(dataframe)
         
         return dataframe
 
@@ -769,24 +795,321 @@ class EnhancedGridStrategy(GridTradingStrategy):
 
     def detect_market_regime(self, dataframe: DataFrame) -> str:
         """
-        市场状态识别（预留接口）
+        增强市场状态识别 - 使用ADX+DI指标识别趋势强度和方向
         
-        此方法将在后续任务中实现具体的市场状态识别逻辑
+        识别规则：
+        1. 震荡市：ADX < 25
+        2. 趋势市：ADX > 40
+        3. 过渡期：25 <= ADX <= 40
+        4. 趋势方向：基于DI指标和MA/EMA交叉确认
+        5. 状态平滑：避免频繁切换
         
         Args:
             dataframe: K线数据
             
         Returns:
-            str: 市场状态（'uptrend', 'downtrend', 'consolidation', 'neutral'）
+            str: 市场状态（'uptrend', 'downtrend', 'consolidation', 'transition'）
         """
         if len(dataframe) == 0:
-            return "neutral"
+            return "consolidation"
         
-        # 获取最新的市场状态
-        if 'market_regime' in dataframe.columns:
-            return dataframe['market_regime'].iloc[-1]
+        try:
+            # 获取最新数据
+            last_candle = dataframe.iloc[-1]
+            
+            # 检查必需指标
+            required_indicators = ['adx', 'plus_di', 'minus_di', 'ema_12', 'ema_26']
+            for indicator in required_indicators:
+                if indicator not in dataframe.columns:
+                    self.logger.warning(f"缺少必需指标: {indicator}")
+                    return "consolidation"
+                    
+            current_adx = last_candle['adx']
+            current_plus_di = last_candle['plus_di']
+            current_minus_di = last_candle['minus_di']
+            current_ema_12 = last_candle['ema_12']
+            current_ema_26 = last_candle['ema_26']
+            
+            # 检查数据有效性
+            if any(np.isnan([current_adx, current_plus_di, current_minus_di, current_ema_12, current_ema_26])):
+                return "consolidation"
+            
+            # 1. 基于ADX判断市场状态类型
+            if current_adx < self.adx_consolidation_threshold.value:
+                # 震荡市场 - ADX较低，趋势不明显
+                regime_type = "consolidation"
+            elif current_adx > self.adx_trend_threshold.value:
+                # 强趋势市场 - 需要进一步确认方向
+                regime_type = self._determine_trend_direction(dataframe, last_candle)
+            else:
+                # 过渡期 - ADX在中等范围
+                regime_type = "transition"
+            
+            # 2. 平滑处理 - 避免频繁切换
+            regime_type = self._apply_regime_smoothing(regime_type, dataframe)
+            
+            # 3. 记录历史状态
+            self._record_regime_history(regime_type)
+            
+            # 4. 更新内部状态
+            self._market_regime = regime_type
+            
+            self.logger.debug(
+                f"市场状态识别: {regime_type} "
+                f"(ADX:{current_adx:.2f}, +DI:{current_plus_di:.2f}, -DI:{current_minus_di:.2f})"
+            )
+            
+            return regime_type
+            
+        except Exception as e:
+            self.logger.error(f"市场状态识别错误: {e}")
+            return "consolidation"  # 错误时返回保守状态
+
+    def _determine_trend_direction(self, dataframe: DataFrame, last_candle) -> str:
+        """
+        确定趋势方向 - 结合DI指标和MA/EMA交叉分析
         
-        return "neutral"
+        Args:
+            dataframe: K线数据
+            last_candle: 最新K线数据
+            
+        Returns:
+            str: 趋势方向 ('uptrend', 'downtrend', 'transition')
+        """
+        try:
+            current_plus_di = last_candle['plus_di']
+            current_minus_di = last_candle['minus_di']
+            current_ema_12 = last_candle['ema_12']
+            current_ema_26 = last_candle['ema_26']
+            
+            # DI指标比例分析
+            di_ratio_threshold = self.di_ratio_threshold.value
+            
+            # EMA交叉分析
+            ema_bullish = current_ema_12 > current_ema_26
+            ema_bearish = current_ema_12 < current_ema_26
+            
+            # 综合判断趋势方向
+            if (current_plus_di > current_minus_di * di_ratio_threshold and ema_bullish):
+                # 多头信号：+DI明显大于-DI且EMA多头排列
+                return "uptrend"
+            elif (current_minus_di > current_plus_di * di_ratio_threshold and ema_bearish):
+                # 空头信号：-DI明显大于+DI且EMA空头排列
+                return "downtrend"
+            else:
+                # 信号不一致或强度不够，属于过渡状态
+                return "transition"
+                
+        except Exception as e:
+            self.logger.error(f"趋势方向判断错误: {e}")
+            return "transition"
+    
+    def _apply_regime_smoothing(self, current_regime: str, dataframe: DataFrame) -> str:
+        """
+        市场状态平滑处理 - 避免频繁切换
+        
+        策略：
+        1. 检查近期状态历史
+        2. 只有在新状态持续一定时间后才确认切换
+        3. 特殊情况：从趋势切换到震荡时直接确认
+        
+        Args:
+            current_regime: 当前识别到的状态
+            dataframe: K线数据
+            
+        Returns:
+            str: 平滑后的市场状态
+        """
+        try:
+            # 获取历史状态列（如果存在）
+            if 'market_regime_raw' in dataframe.columns and len(dataframe) >= self.regime_smoothing_period.value:
+                recent_regimes = dataframe['market_regime_raw'].tail(self.regime_smoothing_period.value).tolist()
+            else:
+                recent_regimes = []
+            
+            # 如果没有足够的历史数据，直接返回当前状态
+            if len(recent_regimes) < 2:
+                return current_regime
+                
+            # 获取上一个确认的状态
+            last_confirmed_regime = recent_regimes[-1] if recent_regimes else current_regime
+            
+            # 如果状态未发生变化，直接返回
+            if current_regime == last_confirmed_regime:
+                return current_regime
+            
+            # 特殊规则：趋势切换到震荡/过渡时快速确认
+            if (last_confirmed_regime in ['uptrend', 'downtrend'] and 
+                current_regime in ['consolidation', 'transition']):
+                self.logger.info(f"趋势结束信号：{last_confirmed_regime} -> {current_regime}")
+                return current_regime
+            
+            # 计算新状态的一致性
+            regime_consistency_count = sum(1 for regime in recent_regimes[-self.regime_smoothing_period.value:] 
+                                         if regime == current_regime)
+            
+            # 只有在新状态达到一定一致性时才确认切换
+            required_consistency = max(2, self.regime_smoothing_period.value // 2)
+            
+            if regime_consistency_count >= required_consistency:
+                self.logger.info(f"状态切换确认：{last_confirmed_regime} -> {current_regime}")
+                self._regime_change_count += 1
+                return current_regime
+            else:
+                # 不足以确认切换，继续保持原状态
+                self.logger.debug(f"状态平滑：保持 {last_confirmed_regime} (新状态 {current_regime} 一致性: {regime_consistency_count}/{required_consistency})")
+                return last_confirmed_regime
+                
+        except Exception as e:
+            self.logger.error(f"状态平滑处理错误: {e}")
+            return current_regime
+    
+    def _record_regime_history(self, regime: str) -> None:
+        """
+        记录市场状态历史
+        
+        Args:
+            regime: 市场状态
+        """
+        try:
+            current_time = datetime.now(timezone.utc).isoformat()
+            
+            # 添加到历史记录
+            regime_record = {
+                'timestamp': current_time,
+                'regime': regime,
+                'previous_regime': self._market_regime if hasattr(self, '_market_regime') else 'unknown'
+            }
+            
+            self._regime_history.append(regime_record)
+            
+            # 限制历史记录数量（保持最近100条记录）
+            if len(self._regime_history) > 100:
+                self._regime_history = self._regime_history[-100:]
+                
+        except Exception as e:
+            self.logger.error(f"历史状态记录错误: {e}")
+    
+    def _apply_market_regime_detection(self, dataframe: DataFrame) -> DataFrame:
+        """
+        应用市场状态识别并添加相关指标
+        
+        Args:
+            dataframe: K线数据
+            
+        Returns:
+            DataFrame: 包含状态识别指标的数据框
+        """
+        try:
+            if len(dataframe) == 0:
+                return dataframe
+                
+            # 先计算原始状态（未平滑）
+            raw_regimes = []
+            for i in range(len(dataframe)):
+                temp_df = dataframe.iloc[:i+1]
+                if len(temp_df) < 20:  # 需要足够的数据计算指标
+                    raw_regimes.append('consolidation')
+                    continue
+                    
+                last_candle = temp_df.iloc[-1]
+                
+                # 检查必需指标
+                if any(np.isnan([last_candle.get('adx', np.nan), 
+                               last_candle.get('plus_di', np.nan),
+                               last_candle.get('minus_di', np.nan)])):
+                    raw_regimes.append('consolidation')
+                    continue
+                    
+                current_adx = last_candle['adx']
+                current_plus_di = last_candle['plus_di']
+                current_minus_di = last_candle['minus_di']
+                current_ema_12 = last_candle.get('ema_12', np.nan)
+                current_ema_26 = last_candle.get('ema_26', np.nan)
+                
+                # 基本状态判断
+                if current_adx < self.adx_consolidation_threshold.value:
+                    regime = "consolidation"
+                elif current_adx > self.adx_trend_threshold.value:
+                    # 趋势方向判断
+                    di_ratio = self.di_ratio_threshold.value
+                    ema_bullish = not np.isnan(current_ema_12) and not np.isnan(current_ema_26) and current_ema_12 > current_ema_26
+                    ema_bearish = not np.isnan(current_ema_12) and not np.isnan(current_ema_26) and current_ema_12 < current_ema_26
+                    
+                    if current_plus_di > current_minus_di * di_ratio and ema_bullish:
+                        regime = "uptrend"
+                    elif current_minus_di > current_plus_di * di_ratio and ema_bearish:
+                        regime = "downtrend"
+                    else:
+                        regime = "transition"
+                else:
+                    regime = "transition"
+                    
+                raw_regimes.append(regime)
+            
+            # 添加原始状态列
+            dataframe['market_regime_raw'] = raw_regimes
+            
+            # 平滑处理
+            smoothed_regimes = []
+            for i in range(len(dataframe)):
+                if i < self.regime_smoothing_period.value:
+                    smoothed_regimes.append(raw_regimes[i])
+                else:
+                    # 获取最近N个状态
+                    recent_regimes = raw_regimes[max(0, i-self.regime_smoothing_period.value+1):i+1]
+                    current_regime = raw_regimes[i]
+                    last_smoothed = smoothed_regimes[-1]
+                    
+                    # 平滑逻辑
+                    if current_regime == last_smoothed:
+                        smoothed_regimes.append(current_regime)
+                    else:
+                        # 特殊情况：趋势结束
+                        if (last_smoothed in ['uptrend', 'downtrend'] and 
+                            current_regime in ['consolidation', 'transition']):
+                            smoothed_regimes.append(current_regime)
+                        else:
+                            # 检查一致性
+                            consistency = sum(1 for r in recent_regimes if r == current_regime)
+                            required = max(2, self.regime_smoothing_period.value // 2)
+                            
+                            if consistency >= required:
+                                smoothed_regimes.append(current_regime)
+                            else:
+                                smoothed_regimes.append(last_smoothed)
+                                
+            dataframe['market_regime'] = smoothed_regimes
+            
+            # 添加额外的分析指标
+            dataframe['regime_adx_score'] = np.where(
+                dataframe['adx'] < self.adx_consolidation_threshold.value, 0,
+                np.where(dataframe['adx'] > self.adx_trend_threshold.value, 2, 1)
+            )
+            
+            dataframe['regime_di_ratio'] = np.where(
+                dataframe['minus_di'] != 0,
+                dataframe['plus_di'] / dataframe['minus_di'],
+                1.0
+            )
+            
+            # 状态持续时间计数
+            regime_duration = []
+            current_duration = 1
+            for i in range(len(smoothed_regimes)):
+                if i > 0 and smoothed_regimes[i] == smoothed_regimes[i-1]:
+                    current_duration += 1
+                else:
+                    current_duration = 1
+                regime_duration.append(current_duration)
+                
+            dataframe['regime_duration'] = regime_duration
+            
+            return dataframe
+            
+        except Exception as e:
+            self.logger.error(f"市场状态识别应用错误: {e}")
+            return dataframe
 
     def calculate_enhanced_position_size(self, pair: str, current_time: datetime, 
                                        current_rate: float, proposed_stake: float,
