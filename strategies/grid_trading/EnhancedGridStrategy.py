@@ -183,7 +183,82 @@ class EnhancedGridStrategy(GridTradingStrategy):
         description="最大同时持有仓位数量"
     )
     
-    # 动态止损增强系数
+    # 三层止损系统参数
+    tier1_profit = DecimalParameter(
+        low=0.005, high=0.015, default=0.008, 
+        space="sell", optimize=True, load=True,
+        description="第一层启动盈利阈值 (0.8%)"
+    )
+    
+    tier1_distance = DecimalParameter(
+        low=0.003, high=0.010, default=0.005, 
+        space="sell", optimize=True, load=True,
+        description="第一层追踪距离 (0.5%)"
+    )
+    
+    tier2_profit = DecimalParameter(
+        low=0.015, high=0.030, default=0.020, 
+        space="sell", optimize=True, load=True,
+        description="第二层启动盈利阈值 (2%)"
+    )
+    
+    tier2_distance = DecimalParameter(
+        low=0.008, high=0.025, default=0.015, 
+        space="sell", optimize=True, load=True,
+        description="第二层追踪距离 (1.5%)"
+    )
+    
+    tier3_profit = DecimalParameter(
+        low=0.035, high=0.070, default=0.050, 
+        space="sell", optimize=True, load=True,
+        description="第三层启动盈利阈值 (5%)"
+    )
+    
+    tier3_distance = DecimalParameter(
+        low=0.020, high=0.050, default=0.030, 
+        space="sell", optimize=True, load=True,
+        description="第三层追踪距离 (3%)"
+    )
+    
+    # 时间止损参数
+    max_hold_hours = IntParameter(
+        low=12, high=72, default=48, 
+        space="sell", optimize=True, load=True,
+        description="最大持仓时间（小时）"
+    )
+    
+    time_exit_profit_threshold = DecimalParameter(
+        low=-0.10, high=0.05, default=0.0, 
+        space="sell", optimize=True, load=True,
+        description="时间止损盈利阈值"
+    )
+    
+    # 风险管理系统参数
+    max_daily_loss = DecimalParameter(
+        low=0.02, high=0.10, default=0.05, 
+        space="sell", optimize=True, load=True,
+        description="单日最大损失限制 (5%)"
+    )
+    
+    max_weekly_loss = DecimalParameter(
+        low=0.05, high=0.20, default=0.10, 
+        space="sell", optimize=True, load=True,
+        description="单周最大损失限制 (10%)"
+    )
+    
+    drawdown_pause_threshold = DecimalParameter(
+        low=0.10, high=0.25, default=0.15, 
+        space="sell", optimize=True, load=True,
+        description="回撤暂停交易阈值 (15%)"
+    )
+    
+    consecutive_loss_limit = IntParameter(
+        low=3, high=10, default=5, 
+        space="sell", optimize=False, load=True,
+        description="连续亏损熔断限制"
+    )
+    
+    # 动态止损增强系数（保留原有参数）
     enhanced_stoploss_factor = DecimalParameter(
         low=0.8, high=1.5, default=1.1, 
         space="sell", optimize=True, load=True,
@@ -212,6 +287,18 @@ class EnhancedGridStrategy(GridTradingStrategy):
         # 市场状态历史记录
         self._regime_history: list = []  # 存储历史状态用于分析
         self._regime_change_count: int = 0  # 状态切换计数
+        
+        # 风险控制系统初始化
+        from collections import deque
+        self.custom_trade_info: Dict[str, Any] = {}  # 交易追踪信息
+        self.daily_pnl = deque(maxlen=7)  # 每日损盈记录
+        self.trade_history = deque(maxlen=100)  # 交易历史
+        self.consecutive_losses = 0  # 连续亏损计数
+        self.current_drawdown = 0.0  # 当前回撤
+        self.max_equity = 0.0  # 历史最大权益
+        self.trading_paused = False  # 交易暂停状态
+        self.last_daily_check: Optional[datetime] = None  # 上次日度检查时间
+        self.emergency_exit_triggered = False  # 紧急退出标志
         
         # 日志记录
         self.logger.info(f"增强网格策略 {self.STRATEGY_VERSION} 初始化完成")
@@ -1229,9 +1316,13 @@ class EnhancedGridStrategy(GridTradingStrategy):
                                   current_rate: float, current_profit: float,
                                   **kwargs) -> float:
         """
-        增强止损计算（预留接口）
+        集成VATSM的三层追踪止损系统
         
-        此方法将在后续任务中实现具体的增强止损逻辑
+        核心功能：
+        1. 三层追踪止损：不同盈利水平采用不同止损距离
+        2. 时间止损：持仓时间过长强制退出
+        3. 动态风险调整：基于市场波动率调整止损敏感度
+        4. 回撤保护：大回撤时收紧止损
         
         Args:
             pair: 交易对
@@ -1242,23 +1333,294 @@ class EnhancedGridStrategy(GridTradingStrategy):
             **kwargs: 其他参数
             
         Returns:
-            float: 止损比例
+            float: 动态止损比例
         """
-        # 当前实现：调用父类逻辑并应用增强系数，后续将进一步增强
-        base_stoploss = super().custom_stoploss(
-            pair=pair,
-            trade=trade,
-            current_time=current_time,
-            current_rate=current_rate,
-            current_profit=current_profit,
-            **kwargs
-        )
+        try:
+            # 1. 获取或初始化交易追踪信息
+            trade_id = f"{pair}_{trade.open_date_utc}"
+            
+            if trade_id not in self.custom_trade_info:
+                self.custom_trade_info[trade_id] = {
+                    'max_profit': current_profit,
+                    'trailing_activated': False,
+                    'tier_activated': 0,
+                    'entry_time': current_time,
+                    'entry_rate': trade.open_rate,
+                    'stop_loss_history': [],
+                    'risk_level': 'normal'  # normal, elevated, high
+                }
+            
+            trade_info = self.custom_trade_info[trade_id]
+            
+            # 2. 更新最大盈利记录
+            if current_profit > trade_info['max_profit']:
+                trade_info['max_profit'] = current_profit
+            
+            # 3. 计算基础止损（来自父类）
+            base_stoploss = super().custom_stoploss(
+                pair=pair,
+                trade=trade,
+                current_time=current_time,
+                current_rate=current_rate,
+                current_profit=current_profit,
+                **kwargs
+            )
+            
+            # 4. 三层追踪止损计算
+            trailing_stoploss = self._calculate_tiered_trailing_stop(
+                trade_info, current_profit, base_stoploss
+            )
+            
+            # 5. 时间止损检查
+            time_stoploss = self._calculate_time_based_stop(
+                trade_info, current_time, current_profit
+            )
+            
+            # 6. 动态风险调整
+            risk_adjusted_stoploss = self._apply_risk_adjustments(
+                pair, trailing_stoploss, time_stoploss, trade_info
+            )
+            
+            # 7. 记录止损历史用于分析
+            trade_info['stop_loss_history'].append({
+                'timestamp': current_time,
+                'profit': current_profit,
+                'stoploss': risk_adjusted_stoploss,
+                'tier': trade_info['tier_activated']
+            })
+            
+            # 8. 限制历史记录大小
+            if len(trade_info['stop_loss_history']) > 50:
+                trade_info['stop_loss_history'] = trade_info['stop_loss_history'][-50:]
+            
+            self.logger.debug(
+                f"增强止损计算 {pair}: 盈利={current_profit:.4f}, "
+                f"层级={trade_info['tier_activated']}, 止损={risk_adjusted_stoploss:.4f}"
+            )
+            
+            return risk_adjusted_stoploss
+            
+        except Exception as e:
+            self.logger.error(f"增强止损计算错误 {pair}: {e}")
+            # 错误时返回保守的基础止损
+            return max(self.stoploss, -0.15)
+
+    def _calculate_tiered_trailing_stop(self, trade_info: dict, current_profit: float, base_stoploss: float) -> float:
+        """
+        计算三层追踪止损
         
-        # 应用增强系数
-        enhanced_stoploss = base_stoploss * self.enhanced_stoploss_factor.value
+        三层止损逻辑：
+        - 第一层：小盈利保护，较小追踪距离，早期启动
+        - 第二层：中盈利保护，适中追踪距离，平衡保护
+        - 第三层：大盈利保护，较大追踪距离，最大化收益
         
-        # 确保在合理范围内
-        return max(enhanced_stoploss, -0.12)  # 最大止损12%
+        Args:
+            trade_info: 交易追踪信息
+            current_profit: 当前盈利
+            base_stoploss: 基础止损
+            
+        Returns:
+            float: 三层追踪止损值
+        """
+        try:
+            trailing_distance = 0.0
+            max_profit = trade_info['max_profit']
+            
+            # 第三层：大盈利保护（5%以上）
+            if current_profit > self.tier3_profit.value:
+                trailing_distance = self.tier3_distance.value
+                if trade_info['tier_activated'] < 3:
+                    trade_info['tier_activated'] = 3
+                    trade_info['trailing_activated'] = True
+                    self.logger.info(f"启动第三层止损保护: 盈利={current_profit:.4f}, 距离={trailing_distance:.4f}")
+            
+            # 第二层：中等盈利保护（2%以上）
+            elif current_profit > self.tier2_profit.value:
+                trailing_distance = self.tier2_distance.value
+                if trade_info['tier_activated'] < 2:
+                    trade_info['tier_activated'] = 2
+                    trade_info['trailing_activated'] = True
+                    self.logger.info(f"启动第二层止损保护: 盈利={current_profit:.4f}, 距离={trailing_distance:.4f}")
+            
+            # 第一层：小盈利保护（0.8%以上）
+            elif current_profit > self.tier1_profit.value:
+                trailing_distance = self.tier1_distance.value
+                if trade_info['tier_activated'] < 1:
+                    trade_info['tier_activated'] = 1
+                    trade_info['trailing_activated'] = True
+                    self.logger.info(f"启动第一层止损保护: 盈利={current_profit:.4f}, 距离={trailing_distance:.4f}")
+            
+            # 如果追踪止损已启动且有追踪距离
+            if trade_info['trailing_activated'] and trailing_distance > 0:
+                # 追踪止损位置 = 最大盈利 - 对应追踪距离
+                trailing_stop = max_profit - trailing_distance
+                # 确保追踪止损不会低于基础止损
+                return max(base_stoploss, trailing_stop)
+            
+            # 未启动追踪止损时，使用基础止损
+            return base_stoploss
+            
+        except Exception as e:
+            self.logger.error(f"三层追踪止损计算错误: {e}")
+            return base_stoploss
+    
+    def _calculate_time_based_stop(self, trade_info: dict, current_time: datetime, current_profit: float) -> Optional[float]:
+        """
+        计算时间止损
+        
+        时间止损规则：
+        - 持仓时间超过设定最大时间且盈利满足条件时触发
+        - 避免长期占用资金的无效持仓
+        
+        Args:
+            trade_info: 交易追踪信息
+            current_time: 当前时间
+            current_profit: 当前盈利
+            
+        Returns:
+            Optional[float]: 时间止损值，None表示未触发
+        """
+        try:
+            if 'entry_time' not in trade_info:
+                return None
+                
+            entry_time = trade_info['entry_time']
+            hold_duration = current_time - entry_time
+            hold_hours = hold_duration.total_seconds() / 3600
+            
+            # 检查是否超过最大持仓时间
+            if hold_hours > self.max_hold_hours.value:
+                # 检查盈利是否满足时间止损条件
+                if current_profit > self.time_exit_profit_threshold.value:
+                    # 时间止损：当前盈利减去小幅缓冲避免滑点
+                    time_stop = current_profit - 0.005  # 0.5%缓冲
+                    self.logger.info(
+                        f"触发时间止损: 持仓{hold_hours:.1f}小时, 盈利={current_profit:.4f}, "
+                        f"止损={time_stop:.4f}"
+                    )
+                    return time_stop
+                else:
+                    # 盈利不足但时间过长，使用更激进的止损
+                    aggressive_stop = current_profit - 0.01  # 1%缓冲
+                    self.logger.warning(
+                        f"长期持仓盈利不足: 持仓{hold_hours:.1f}小时, 盈利={current_profit:.4f}, "
+                        f"激进止损={aggressive_stop:.4f}"
+                    )
+                    return aggressive_stop
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"时间止损计算错误: {e}")
+            return None
+    
+    def _apply_risk_adjustments(self, pair: str, trailing_stoploss: float, 
+                              time_stoploss: Optional[float], trade_info: dict) -> float:
+        """
+        应用动态风险调整
+        
+        风险调整因子：
+        1. 市场波动率调整
+        2. 当前回撤水平调整
+        3. 连续亏损调整
+        4. 紧急风控调整
+        
+        Args:
+            pair: 交易对
+            trailing_stoploss: 追踪止损值
+            time_stoploss: 时间止损值
+            trade_info: 交易信息
+            
+        Returns:
+            float: 风险调整后的最终止损值
+        """
+        try:
+            # 1. 选择基础止损（时间止损 vs 追踪止损）
+            if time_stoploss is not None:
+                # 时间止损存在时，选择更严格的
+                base_stop = max(trailing_stoploss, time_stoploss)
+                self.logger.debug(f"采用时间止损: {base_stop:.4f}")
+            else:
+                base_stop = trailing_stoploss
+            
+            # 2. 获取当前市场数据进行波动率调整
+            try:
+                dataframe = self._get_current_dataframe(pair)
+                if dataframe is not None and len(dataframe) > 0:
+                    volatility_adjustment = self._calculate_volatility_stop_adjustment(dataframe)
+                    base_stop *= volatility_adjustment
+                    
+                    self.logger.debug(f"波动率调整: {volatility_adjustment:.3f}")
+            except Exception as e:
+                self.logger.warning(f"波动率调整失败: {e}")
+            
+            # 3. 回撤水平调整
+            if self.current_drawdown > self.drawdown_pause_threshold.value * 0.5:
+                # 回撤较大时收紧止损
+                drawdown_adjustment = 1.2  # 收紧20%
+                base_stop *= drawdown_adjustment
+                trade_info['risk_level'] = 'elevated'
+                self.logger.info(f"回撤调整止损: 回撤={self.current_drawdown:.4f}, 调整={drawdown_adjustment:.3f}")
+            
+            # 4. 连续亏损调整
+            if self.consecutive_losses >= 3:
+                # 连续亏损时更加保守
+                loss_adjustment = 1.1 + (self.consecutive_losses - 3) * 0.05
+                base_stop *= min(loss_adjustment, 1.5)  # 最大调整50%
+                trade_info['risk_level'] = 'high'
+                self.logger.info(f"连续亏损调整: 连续={self.consecutive_losses}, 调整={loss_adjustment:.3f}")
+            
+            # 5. 应用增强因子
+            final_stop = base_stop * self.enhanced_stoploss_factor.value
+            
+            # 6. 边界检查：确保止损在合理范围
+            final_stop = max(final_stop, -0.20)  # 最大止损20%
+            final_stop = min(final_stop, 0.05)   # 最小止损（允许小幅盈利止损）
+            
+            return final_stop
+            
+        except Exception as e:
+            self.logger.error(f"风险调整计算错误: {e}")
+            return trailing_stoploss
+    
+    def _calculate_volatility_stop_adjustment(self, dataframe: DataFrame) -> float:
+        """
+        基于市场波动率的止损调整
+        
+        Args:
+            dataframe: 市场数据
+            
+        Returns:
+            float: 波动率调整因子
+        """
+        try:
+            if len(dataframe) == 0:
+                return 1.0
+            
+            last_candle = dataframe.iloc[-1]
+            
+            # 基于ATR的波动率调整
+            if 'atr_percent' in dataframe.columns:
+                current_atr = last_candle['atr_percent']
+                avg_atr = dataframe['atr_percent'].rolling(window=20).mean().iloc[-1]
+                
+                if not pd.isna(current_atr) and not pd.isna(avg_atr) and avg_atr > 0:
+                    atr_ratio = current_atr / avg_atr
+                    
+                    # 高波动时收紧止损，低波动时放松止损
+                    if atr_ratio > 1.5:  # 高波动
+                        return 1.15  # 收紧15%
+                    elif atr_ratio < 0.7:  # 低波动
+                        return 0.9   # 放松10%
+                    else:
+                        # 线性调整
+                        return 0.9 + (atr_ratio - 0.7) * 0.31  # 0.9 到 1.15
+            
+            return 1.0
+            
+        except Exception as e:
+            self.logger.error(f"波动率止损调整计算错误: {e}")
+            return 1.0
 
     # ===========================================
     # 重写父类方法以集成增强功能
@@ -1302,15 +1664,48 @@ class EnhancedGridStrategy(GridTradingStrategy):
                        current_rate: float, current_profit: float, **kwargs) -> float:
         """
         重写止损方法以集成增强功能
+        
+        集成功能：
+        1. 三层追踪止损系统
+        2. 风险控制和紧急平仓
+        3. 交易历史记录和分析
+        4. 连续亏损熔断检查
         """
-        return self.calculate_enhanced_stoploss(
-            pair=pair,
-            trade=trade,
-            current_time=current_time,
-            current_rate=current_rate,
-            current_profit=current_profit,
-            **kwargs
-        )
+        try:
+            # 1. 检查交易暂停状态
+            if self.trading_paused:
+                self.logger.warning(f"交易已暂停，触发紧急平仓: {pair}")
+                return current_profit - 0.001  # 立即平仓
+            
+            # 2. 检查紧急平仓条件
+            if self.emergency_exit_triggered:
+                self.logger.error(f"紧急平仓触发: {pair}")
+                return current_profit - 0.001  # 立即平仓
+            
+            # 3. 调用增强止损计算
+            enhanced_stoploss = self.calculate_enhanced_stoploss(
+                pair=pair,
+                trade=trade,
+                current_time=current_time,
+                current_rate=current_rate,
+                current_profit=current_profit,
+                **kwargs
+            )
+            
+            # 4. 记录交易数据用于风险分析
+            self._update_trade_statistics(pair, trade, current_profit, current_time)
+            
+            # 5. 执行风险控制检查
+            risk_adjusted_stoploss = self._apply_global_risk_controls(
+                pair, enhanced_stoploss, current_profit, current_time
+            )
+            
+            return risk_adjusted_stoploss
+            
+        except Exception as e:
+            self.logger.error(f"自定义止损计算错误 {pair}: {e}")
+            # 错误时返回保守止损
+            return max(self.stoploss, -0.12)
     
     # ===========================================
     # 增强仓位管理支持方法
@@ -1511,3 +1906,272 @@ class EnhancedGridStrategy(GridTradingStrategy):
         except Exception as e:
             self.logger.error(f"仓位风控处理错误: {e}")
             return base_stake  # 错误时返回基础仓位
+    
+    # ===========================================
+    # 风险控制系统支持方法
+    # ===========================================
+    
+    def _update_trade_statistics(self, pair: str, trade: 'Trade', current_profit: float, current_time: datetime) -> None:
+        """
+        更新交易统计信息用于风险分析
+        
+        Args:
+            pair: 交易对
+            trade: 交易对象
+            current_profit: 当前盈利
+            current_time: 当前时间
+        """
+        try:
+            # 更新历史最大权益
+            current_equity = self.wallets.get_total_stake_amount() if hasattr(self, 'wallets') else 10000.0
+            if current_equity > self.max_equity:
+                self.max_equity = current_equity
+                self.current_drawdown = 0.0  # 重置回撤
+            else:
+                # 计算当前回撤
+                if self.max_equity > 0:
+                    self.current_drawdown = (self.max_equity - current_equity) / self.max_equity
+            
+            # 记录交易结果（当交易结束时）
+            if hasattr(trade, 'is_open') and not trade.is_open:
+                # 交易已关闭，记录结果
+                profit_loss = trade.calc_profit_ratio(trade.close_rate or current_profit)
+                self.trade_history.append(profit_loss)
+                
+                # 更新连续亏损计数
+                if profit_loss < 0:
+                    self.consecutive_losses += 1
+                    self.logger.info(f"连续亏损计数更新: {self.consecutive_losses}")
+                else:
+                    self.consecutive_losses = 0  # 重置连续亏损计数
+                    
+            # 每日风险检查
+            self._check_daily_risk_limits(current_time)
+            
+        except Exception as e:
+            self.logger.error(f"交易统计更新错误: {e}")
+    
+    def _apply_global_risk_controls(self, pair: str, stoploss: float, current_profit: float, current_time: datetime) -> float:
+        """
+        应用全局风险控制
+        
+        Args:
+            pair: 交易对
+            stoploss: 基础止损
+            current_profit: 当前盈利
+            current_time: 当前时间
+            
+        Returns:
+            float: 风险调整后的止损
+        """
+        try:
+            # 1. 连续亏损熔断检查
+            if self.consecutive_losses >= self.consecutive_loss_limit.value:
+                self.logger.warning(f"触发连续亏损熔断: {self.consecutive_losses}次连续亏损")
+                self.trading_paused = True
+                return current_profit - 0.001  # 立即平仓
+            
+            # 2. 回撤保护检查
+            if self.current_drawdown > self.drawdown_pause_threshold.value:
+                self.logger.error(f"触发回撤保护: 当前回撤={self.current_drawdown:.4f}")
+                self.emergency_exit_triggered = True
+                return current_profit - 0.001  # 立即平仓
+            
+            # 3. 单日损失限制检查
+            if not self._check_daily_risk_limits(current_time):
+                self.logger.warning(f"触发单日损失限制")
+                return min(stoploss, current_profit - 0.002)  # 收紧止损
+            
+            # 4. 大回撤时收紧止损
+            if self.current_drawdown > self.drawdown_pause_threshold.value * 0.6:
+                tightening_factor = 1.3  # 收紧30%
+                adjusted_stoploss = stoploss * tightening_factor
+                self.logger.info(f"大回撤收紧止损: {stoploss:.4f} -> {adjusted_stoploss:.4f}")
+                return adjusted_stoploss
+            
+            return stoploss
+            
+        except Exception as e:
+            self.logger.error(f"全局风险控制错误: {e}")
+            return stoploss
+    
+    def _check_daily_risk_limits(self, current_time: datetime) -> bool:
+        """
+        检查日度和周度损失限制
+        
+        Args:
+            current_time: 当前时间
+            
+        Returns:
+            bool: True表示通过风险检查，False表示超限
+        """
+        try:
+            # 检查是否需要更新日度记录
+            if self.last_daily_check is None or current_time.date() != self.last_daily_check:
+                self.last_daily_check = current_time.date()
+                # 计算昨日损益并记录
+                daily_pnl = self._calculate_daily_pnl(current_time)
+                self.daily_pnl.append(daily_pnl)
+                
+            # 检查单日损失
+            if len(self.daily_pnl) > 0:
+                today_pnl = self.daily_pnl[-1]
+                if today_pnl < -self.max_daily_loss.value:
+                    self.logger.error(f"超过单日最大损失: {today_pnl:.4f} < {-self.max_daily_loss.value:.4f}")
+                    self.trading_paused = True
+                    return False
+                    
+            # 检查周度损失
+            if len(self.daily_pnl) >= 2:  # 至少有2天数据
+                weekly_pnl = sum(list(self.daily_pnl)[-7:])  # 过去7天
+                if weekly_pnl < -self.max_weekly_loss.value:
+                    self.logger.error(f"超过单周最大损失: {weekly_pnl:.4f} < {-self.max_weekly_loss.value:.4f}")
+                    self.trading_paused = True
+                    return False
+                    
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"日度风险检查错误: {e}")
+            return True  # 错误时允许交易继续
+    
+    def _calculate_daily_pnl(self, current_time: datetime) -> float:
+        """
+        计算每日损益
+        
+        这里是简化实现，实际应用中需要连接真实的账户数据
+        
+        Args:
+            current_time: 当前时间
+            
+        Returns:
+            float: 日度损益比例
+        """
+        try:
+            # 基于交易历史估算日度损益
+            if len(self.trade_history) == 0:
+                return 0.0
+                
+            # 简化计算：使用最近几笔交易的平均值作为日度损益估计
+            recent_trades = list(self.trade_history)[-10:]  # 最近10笔交易
+            if recent_trades:
+                daily_estimate = sum(recent_trades) / len(recent_trades)
+                return daily_estimate
+            else:
+                return 0.0
+                
+        except Exception as e:
+            self.logger.error(f"日度损益计算错误: {e}")
+            return 0.0
+    
+    def reset_risk_controls(self) -> None:
+        """
+        重置风险控制状态（用于测试或手动干预）
+        """
+        self.trading_paused = False
+        self.emergency_exit_triggered = False
+        self.consecutive_losses = 0
+        self.current_drawdown = 0.0
+        self.logger.info("风险控制状态已重置")
+    
+    def get_risk_status(self) -> Dict[str, Any]:
+        """
+        获取当前风险状态报告
+        
+        Returns:
+            dict: 风险状态信息
+        """
+        return {
+            'trading_paused': self.trading_paused,
+            'emergency_exit_triggered': self.emergency_exit_triggered,
+            'consecutive_losses': self.consecutive_losses,
+            'consecutive_loss_limit': self.consecutive_loss_limit.value,
+            'current_drawdown': self.current_drawdown,
+            'drawdown_threshold': self.drawdown_pause_threshold.value,
+            'max_equity': self.max_equity,
+            'daily_pnl_history': list(self.daily_pnl),
+            'trade_history_count': len(self.trade_history),
+            'risk_controls_active': self.trading_paused or self.emergency_exit_triggered
+        }
+    
+    # ===========================================
+    # 重写入场/出场逻辑集成风险控制
+    # ===========================================
+    
+    def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        """
+        增强网格交易入场信号 - 集成风险控制
+        
+        在父类基础上增加风险控制检查：
+        1. 交易暂停检查
+        2. 连续亏损熔断
+        3. 回撤保护
+        4. 单日损失限制
+        """
+        try:
+            # 首先调用父类方法获取基础入场信号
+            dataframe = super().populate_entry_trend(dataframe, metadata)
+            
+            # 如果交易被暂停，清除所有入场信号
+            if self.trading_paused:
+                self.logger.warning("交易已暂停，禁止新入场信号")
+                dataframe['enter_long'] = 0
+                return dataframe
+            
+            # 如果紧急退出被触发，清除所有入场信号
+            if self.emergency_exit_triggered:
+                self.logger.error("紧急退出已触发，禁止新入场信号")
+                dataframe['enter_long'] = 0
+                return dataframe
+            
+            # 检查连续亏损熔断
+            if self.consecutive_losses >= self.consecutive_loss_limit.value:
+                self.logger.warning(f"连续亏损达到熔断条件: {self.consecutive_losses}次，禁止新入场")
+                dataframe['enter_long'] = 0
+                return dataframe
+            
+            # 检查回撤水平
+            if self.current_drawdown > self.drawdown_pause_threshold.value * 0.8:
+                self.logger.warning(f"回撤水平过高: {self.current_drawdown:.4f}，减少入场信号")
+                # 在高回撤时，只保留最强的入场信号
+                if 'enter_long' in dataframe.columns:
+                    # 增加额外的过滤条件
+                    enhanced_filter = (
+                        (dataframe['rsi'] < 35) &  # 更严格的RSI条件
+                        (dataframe['bb_percent'] < 0.3) &  # 更严格的布林带位置
+                        (dataframe['volume'] > dataframe['volume'].rolling(20).mean() * 1.2)  # 更强的成交量确认
+                    )
+                    dataframe.loc[~enhanced_filter, 'enter_long'] = 0
+            
+            # 增强版入场条件（当启用相关功能时）
+            if self.enable_enhanced_position_sizing.value:
+                # 基于市场状态的入场过滤
+                if self.enable_market_regime_detection.value:
+                    current_regime = self.detect_market_regime(dataframe)
+                    if current_regime == 'downtrend':
+                        # 下跌趋势中更加谨慎
+                        self.logger.debug("下跌趋势检测，收紧入场条件")
+                        if 'enter_long' in dataframe.columns:
+                            conservative_filter = (
+                                (dataframe['rsi'] < 30) &  # 极度超卖
+                                (dataframe['bb_percent'] < 0.2)  # 更接近下轨
+                            )
+                            dataframe.loc[~conservative_filter, 'enter_long'] = 0
+            
+            # 记录入场信号统计
+            entry_signals = dataframe['enter_long'].sum() if 'enter_long' in dataframe.columns else 0
+            if entry_signals > 0:
+                self.logger.info(f"生成{entry_signals}个增强入场信号")
+            
+            return dataframe
+            
+        except Exception as e:
+            self.logger.error(f"增强入场信号计算错误: {e}")
+            # 错误时返回安全的基础信号
+            try:
+                return super().populate_entry_trend(dataframe, metadata)
+            except:
+                # 完全失败时返回无信号的数据框
+                if 'enter_long' in dataframe.columns:
+                    dataframe['enter_long'] = 0
+                return dataframe
