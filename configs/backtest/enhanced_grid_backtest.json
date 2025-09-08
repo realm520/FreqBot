@@ -1,0 +1,236 @@
+{
+  "name": "Enhanced Grid Strategy Backtest Configuration",
+  "description": "增强网格策略专用回测配置，针对回测优化的参数设置",
+  "version": "1.0.0",
+  
+  "general": {
+    "max_open_trades": 3,
+    "stake_currency": "USDT",
+    "stake_amount": "unlimited",
+    "tradable_balance_ratio": 0.99,
+    "dry_run": true,
+    "dry_run_wallet": 10000,
+    "cancel_open_orders_on_exit": false,
+    "trading_mode": "spot",
+    "process_throttle_secs": 5
+  },
+  
+  "exchange": {
+    "name": "binance",
+    "key": "",
+    "secret": "",
+    "ccxt_config": {
+      "enableRateLimit": true,
+      "sandbox": false
+    },
+    "pair_whitelist": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "BNB/USDT",
+      "ADA/USDT",
+      "SOL/USDT"
+    ],
+    "pair_blacklist": []
+  },
+  
+  "pairlists": [
+    {
+      "method": "StaticPairList"
+    }
+  ],
+  
+  "timeframe": "5m",
+  
+  "entry_pricing": {
+    "price_side": "same",
+    "use_order_book": false,
+    "order_book_top": 1,
+    "price_last_balance": 0.0
+  },
+  
+  "exit_pricing": {
+    "price_side": "same", 
+    "use_order_book": false,
+    "order_book_top": 1
+  },
+  
+  "unfilledtimeout": {
+    "entry": 30,
+    "exit": 30,
+    "exit_timeout_count": 0,
+    "unit": "minutes"
+  },
+  
+  "backtest_specific": {
+    "enable_protections": false,
+    "startup_candle_count": 200,
+    "export_trades": true,
+    "export_signals": true,
+    "breakdown": "month"
+  },
+  
+  "strategy": {
+    "strategy_class": "EnhancedGridStrategy",
+    "strategy_path": "strategies/grid_trading/EnhancedGridStrategy.py"
+  },
+  
+  "backtest_periods": {
+    "full_period": {
+      "name": "完整时期回测",
+      "start_date": "20230101",
+      "end_date": "20241201",
+      "description": "完整时间段的策略表现验证"
+    },
+    "bull_market_2023_h1": {
+      "name": "2023上半年牛市",
+      "start_date": "20230101", 
+      "end_date": "20230630",
+      "description": "典型牛市环境下的策略表现"
+    },
+    "bear_market_2023_h2": {
+      "name": "2023下半年调整",
+      "start_date": "20230701",
+      "end_date": "20231231", 
+      "description": "市场调整期的策略适应性"
+    },
+    "consolidation_2024": {
+      "name": "2024年震荡期",
+      "start_date": "20240101",
+      "end_date": "20240630",
+      "description": "横盘震荡市场下的网格策略优势"
+    },
+    "recent_performance": {
+      "name": "近期表现",
+      "start_date": "20240701", 
+      "end_date": "20241201",
+      "description": "最新市场环境下的策略验证"
+    }
+  },
+  
+  "scenario_tests": {
+    "high_volatility_periods": [
+      {
+        "name": "2023年3月银行危机",
+        "start_date": "20230308",
+        "end_date": "20230325",
+        "expected_behavior": "defensive_profit",
+        "risk_threshold": 15
+      },
+      {
+        "name": "2023年8月市场调整",
+        "start_date": "20230801", 
+        "end_date": "20230831",
+        "expected_behavior": "adaptive_grid",
+        "risk_threshold": 20
+      }
+    ],
+    
+    "trend_changes": [
+      {
+        "name": "牛转熊转换期",
+        "start_date": "20230615",
+        "end_date": "20230715",
+        "expected_behavior": "trend_adaptive",
+        "min_trades": 10
+      }
+    ]
+  },
+  
+  "performance_targets": {
+    "minimum_requirements": {
+      "annual_return_pct": 15,
+      "max_drawdown_pct": 15,
+      "sharpe_ratio": 1.0,
+      "win_rate_pct": 50,
+      "profit_factor": 1.1
+    },
+    
+    "target_performance": {
+      "annual_return_pct": 25,
+      "max_drawdown_pct": 10,
+      "sharpe_ratio": 1.5,
+      "win_rate_pct": 60,
+      "profit_factor": 1.5
+    },
+    
+    "excellent_performance": {
+      "annual_return_pct": 35,
+      "max_drawdown_pct": 8,
+      "sharpe_ratio": 2.0,
+      "win_rate_pct": 65,
+      "profit_factor": 2.0
+    }
+  },
+  
+  "optimization_settings": {
+    "enable_optimization": true,
+    "optimization_methods": ["grid_search", "random_search"],
+    "optimization_timerange": "20230101-20240601",
+    "out_of_sample_ratio": 0.25,
+    "max_combinations": 100,
+    "parallel_workers": 4,
+    
+    "parameter_ranges": {
+      "base_grid_size_pct": [0.5, 1.0, 1.5, 2.0, 2.5],
+      "max_grid_levels": [5, 7, 10, 12, 15],
+      "volatility_lookback": [20, 30, 50, 100],
+      "trend_strength_threshold": [0.3, 0.5, 0.7],
+      "risk_management_level": [0.02, 0.03, 0.05],
+      "rebalance_frequency": [4, 6, 12, 24]
+    }
+  },
+  
+  "risk_management": {
+    "max_drawdown_threshold": 0.20,
+    "daily_loss_limit": 0.05,
+    "position_size_limits": {
+      "min_stake_pct": 10,
+      "max_stake_pct": 90,
+      "max_position_per_pair": 33
+    },
+    
+    "protection_settings": {
+      "cooldown_period": 300,
+      "max_allowed_drawdown": 0.15,
+      "stoploss_buffer": 0.02
+    }
+  },
+  
+  "data_requirements": {
+    "required_history_days": 365,
+    "min_candles_per_pair": 10000,
+    "data_quality_checks": true,
+    "fill_missing_data": false
+  },
+  
+  "reporting": {
+    "generate_html_report": true,
+    "include_charts": true,
+    "export_csv": true,
+    "save_trades_detail": true,
+    "benchmark_comparison": true,
+    
+    "chart_settings": {
+      "equity_curve": true,
+      "drawdown_chart": true,
+      "monthly_returns": true,
+      "trade_distribution": true,
+      "performance_metrics": true
+    }
+  },
+  
+  "environment": {
+    "logging_level": "INFO",
+    "log_trades": true,
+    "log_performance": true,
+    "save_intermediate_results": true,
+    "cleanup_temp_files": true
+  },
+  
+  "validation_rules": {
+    "min_sample_size": 50,
+    "max_correlation_with_market": 0.8,
+    "stability_check_periods": 4,
+    "out_of_sample_performance_ratio": 0.7
+  }
+}

@@ -1,0 +1,89 @@
+
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Enhanced Grid Strategy 回测分析报告</title>
+            <style>
+                
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Arial', sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; background: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        header { text-align: center; margin-bottom: 30px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px; }
+        h1 { font-size: 2.5em; margin-bottom: 10px; }
+        h2 { color: #4a5568; margin: 30px 0 20px 0; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0; }
+        h3 { color: #2d3748; margin: 20px 0 10px 0; }
+        .timestamp { font-size: 1.1em; opacity: 0.9; }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; border-left: 4px solid #4299e1; }
+        .card h3 { color: #4a5568; font-size: 1.1em; margin-bottom: 10px; }
+        .metric { font-size: 2em; font-weight: bold; color: #2b6cb0; }
+        .rating { text-align: center; margin: 30px 0; padding: 20px; background: #f7fafc; border-radius: 10px; }
+        .rating h3 { color: #2d3748; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        th { background: #4299e1; color: white; font-weight: bold; }
+        tr:hover { background: #f7fafc; }
+        .positive { color: #38a169; font-weight: bold; }
+        .negative { color: #e53e3e; font-weight: bold; }
+        .neutral { color: #4a5568; }
+        
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <header>
+                    <h1>Enhanced Grid Strategy 回测分析报告</h1>
+                    <p class="timestamp">生成时间: 2025-09-06 15:36:41</p>
+                </header>
+                
+                <section class="executive-summary">
+                    <h2>执行摘要</h2>
+                    <div class="summary-cards">
+                        <div class="card">
+                            <h3>总收益率</h3>
+                            <p class="metric">-7.20%</p>
+                        </div>
+                        <div class="card">
+                            <h3>夏普比率</h3>
+                            <p class="metric">-1.18</p>
+                        </div>
+                        <div class="card">
+                            <h3>最大回撤</h3>
+                            <p class="metric">17.00%</p>
+                        </div>
+                        <div class="card">
+                            <h3>胜率</h3>
+                            <p class="metric">57.0%</p>
+                        </div>
+                    </div>
+                    <div class="rating">
+                        <h3>综合评级: 较差</h3>
+                        <p>性能评分: 20/100</p>
+                    </div>
+                </section>
+                
+                <section class="detailed-metrics">
+                    <h2>详细指标分析</h2>
+                    <div class="metrics-tables"><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;"><div><h3>基础指标</h3><table><tr><th>指标</th><th>数值</th></tr><tr><td>总交易次数</td><td>100</td></tr><tr><td>获胜交易</td><td>57</td></tr><tr><td>失败交易</td><td>43</td></tr><tr><td>胜率</td><td>57.00%</td></tr><tr><td>总收益率</td><td>-7.20%</td></tr><tr><td>平均单笔收益</td><td>-0.07%</td></tr><tr><td>最佳交易</td><td>1.64%</td></tr><tr><td>最差交易</td><td>-2.20%</td></tr></table></div><div><h3>风险指标</h3><table><tr><th>指标</th><th>数值</th></tr><tr><td>最大回撤</td><td>17.00%</td></tr><tr><td>收益波动率</td><td>1.08%</td></tr><tr><td>夏普比率</td><td>-1.18</td></tr><tr><td>索提诺比率</td><td>-2.80</td></tr><tr><td>卡尔马比率</td><td>-0.42</td></tr><tr><td>盈利因子</td><td>0.86</td></tr><tr><td>期望收益</td><td>-0.07%</td></tr></table></div></div></div>
+                </section>
+                
+                <section class="benchmark-comparison">
+                    <h2>基准对比分析</h2>
+                    <div class="comparison-section"><p>超额收益: <span class="negative">-190.01%</span></p><p>信息比率: -28.20</p><p>综合评级: <strong>较差</strong></p></div>
+                </section>
+                
+                <section class="risk-analysis">
+                    <h2>风险分析</h2>
+                    <div class="risk-analysis"><p class="negative">⚠ 最大回撤较高，超过15%，需要加强风险控制</p><p class="positive">✓ 收益波动率较低，策略稳定性好</p></div>
+                </section>
+                
+                <section class="conclusions">
+                    <h2>结论与建议</h2>
+                    <div class="conclusions"><h3 class="negative">策略需要改进</h3><ul><li>收益率或风险控制需要优化</li><li>建议重新评估策略参数</li><li>考虑调整风险管理机制</li></ul></div>
+                </section>
+            </div>
+        </body>
+        </html>
+        

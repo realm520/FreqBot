@@ -1,0 +1,248 @@
+{
+  "// 注释": "Strategy-21 VATSM 基础配置文件",
+  "// 版本": "1.0.0",
+  "// 更新时间": "2025-09-06T05:48:55Z",
+  "// 说明": "包含 FreqTrade 框架的基础配置，适用于 Strategy-21 VATSM 策略",
+  
+  "trading_mode": "spot",
+  "dry_run": false,
+  "dry_run_wallet": 10000,
+  "cancel_open_orders_on_exit": true,
+  
+  "// 资金管理配置": "基础资金和风险参数",
+  "max_open_trades": 8,
+  "minimum_trade_amount": 10,
+  "stake_currency": "USDT",
+  "stake_amount": "unlimited",
+  "tradable_balance_ratio": 0.95,
+  "available_capital": 10000,
+  "fiat_display_currency": "USD",
+  
+  "// 时间框架配置": "数据获取和分析周期",
+  "timeframe": "5m",
+  "startup_candle_count": 500,
+  "process_only_new_candles": true,
+  
+  "// 交易所配置": "Binance 交易所连接设置",
+  "exchange": {
+    "name": "binance",
+    "key": "",
+    "secret": "",
+    "ccxt_config": {
+      "enableRateLimit": true,
+      "rateLimit": 200,
+      "sandbox": false
+    },
+    "ccxt_async_config": {
+      "enableRateLimit": true,
+      "rateLimit": 200,
+      "sandbox": false
+    },
+    "pair_whitelist": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "BNB/USDT",
+      "ADA/USDT",
+      "SOL/USDT",
+      "MATIC/USDT",
+      "DOT/USDT",
+      "AVAX/USDT",
+      "LINK/USDT",
+      "UNI/USDT",
+      "ATOM/USDT",
+      "LTC/USDT",
+      "XRP/USDT",
+      "ALGO/USDT",
+      "FTT/USDT"
+    ],
+    "pair_blacklist": [
+      ".*UP/.*",
+      ".*DOWN/.*",
+      ".*(3|5)(S|L)/.*",
+      ".*BEAR/.*",
+      ".*BULL/.*"
+    ]
+  },
+  
+  "// 价格获取配置": "订单价格计算方式",
+  "entry_pricing": {
+    "price_side": "same",
+    "use_order_book": true,
+    "order_book_top": 1,
+    "price_last_balance": 0.0,
+    "check_depth_of_market": {
+      "enabled": false,
+      "bids_to_ask_delta": 1
+    }
+  },
+  
+  "exit_pricing": {
+    "price_side": "same",
+    "use_order_book": true,
+    "order_book_top": 1
+  },
+  
+  "// 订单类型配置": "不同情况下的订单类型设置",
+  "order_types": {
+    "entry": "limit",
+    "exit": "limit",
+    "emergency_exit": "market",
+    "force_entry": "market",
+    "force_exit": "market",
+    "stoploss": "market",
+    "stoploss_on_exchange": true,
+    "stoploss_on_exchange_interval": 60,
+    "stoploss_on_exchange_market_ratio": 0.99
+  },
+  
+  "order_time_in_force": {
+    "entry": "GTC",
+    "exit": "GTC"
+  },
+  
+  "// 订单超时配置": "未成交订单的处理时间",
+  "unfilledtimeout": {
+    "entry": 10,
+    "exit": 30,
+    "exit_timeout_count": 0,
+    "unit": "minutes"
+  },
+  
+  "// 交易对选择配置": "动态交易对筛选规则",
+  "pairlists": [
+    {
+      "method": "StaticPairList"
+    },
+    {
+      "method": "VolumePairList",
+      "number_assets": 20,
+      "sort_key": "quoteVolume",
+      "min_value": 1000000,
+      "refresh_period": 3600,
+      "lookback_days": 1
+    },
+    {
+      "method": "PrecisionFilter"
+    },
+    {
+      "method": "PriceFilter",
+      "low_price_ratio": 0.01,
+      "min_price": 0.00000010,
+      "max_price": 1000
+    }
+  ],
+  
+  "// 保护机制配置": "多层风险保护设置",
+  "protections": [
+    {
+      "method": "StoplossGuard",
+      "lookback_period_candles": 60,
+      "trade_limit": 4,
+      "stop_duration_candles": 60,
+      "required_profit": -0.10,
+      "only_per_pair": false
+    },
+    {
+      "method": "MaxDrawdown",
+      "lookback_period_candles": 200,
+      "trade_limit": 20,
+      "stop_duration_candles": 100,
+      "max_allowed_drawdown": 0.20
+    },
+    {
+      "method": "LowProfitPairs",
+      "lookback_period_candles": 400,
+      "trade_limit": 2,
+      "stop_duration_candles": 60,
+      "required_profit": -0.05
+    },
+    {
+      "method": "CooldownPeriod",
+      "stop_duration_candles": 12,
+      "only_per_pair": true
+    }
+  ],
+  
+  "// 策略配置": "Strategy-21 VATSM 策略设置",
+  "strategy": "Strategy21VATSM",
+  "strategy_path": "user_data/strategies/",
+  
+  "// 数据存储配置": "数据库和文件路径设置",
+  "db_url": "sqlite:///user_data/strategy21_trades.sqlite",
+  "user_data_dir": "user_data",
+  "datadir": "user_data/data",
+  
+  "// 日志配置": "日志级别和输出设置",
+  "log_level": "INFO",
+  "logfile": "logs/strategy21_freqtrade.log",
+  
+  "// API服务配置": "REST API和Web界面设置",
+  "api_server": {
+    "enabled": true,
+    "listen_ip_address": "127.0.0.1",
+    "listen_port": 8080,
+    "verbosity": "info",
+    "enable_openapi": true,
+    "jwt_secret_key": "strategy21_secret_key_2025",
+    "CORS_origins": [
+      "http://localhost:3000",
+      "http://127.0.0.1:8080"
+    ],
+    "username": "strategy21",
+    "password": "strategy21_2025"
+  },
+  
+  "// 机器人配置": "机器人基础信息设置",
+  "bot_name": "Strategy21-VATSM-Bot",
+  "initial_state": "running",
+  "force_entry_enable": false,
+  
+  "// 内部配置": "系统运行参数",
+  "internals": {
+    "process_throttle_secs": 5,
+    "heartbeat_interval": 60,
+    "sd_notify": false
+  },
+  
+  "// Telegram通知配置": "消息推送设置（默认禁用）",
+  "telegram": {
+    "enabled": false,
+    "token": "",
+    "chat_id": "",
+    "notification_settings": {
+      "status": "silent",
+      "warning": "on",
+      "startup": "on",
+      "entry": "silent",
+      "exit": {
+        "roi": "silent",
+        "emergency_exit": "on",
+        "force_exit": "on",
+        "exit_signal": "silent",
+        "trailing_stop_loss": "on",
+        "stop_loss": "on",
+        "stoploss_on_exchange": "on",
+        "custom_exit": "silent"
+      }
+    }
+  },
+  
+  "// Edge位置管理配置": "动态仓位优化（默认禁用）",
+  "edge": {
+    "enabled": false,
+    "process_throttle_secs": 3600,
+    "calculate_since_number_of_days": 14,
+    "allowed_risk": 0.01,
+    "stoploss_range_min": -0.01,
+    "stoploss_range_max": -0.1,
+    "stoploss_range_step": -0.01,
+    "minimum_winrate": 0.65,
+    "minimum_expectancy": 0.25,
+    "min_trade_number": 15,
+    "max_trade_duration_minute": 2880,
+    "remove_pumps": false
+  },
+  
+  "// 手续费配置": "交易手续费设置",
+  "fee": 0.001
+}

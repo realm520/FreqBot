@@ -1,0 +1,445 @@
+{
+  "// 注释": "Strategy-21 VATSM 生产环境配置文件",
+  "// 版本": "1.0.0",
+  "// 更新时间": "2025-09-06T05:48:55Z",
+  "// 说明": "用于 Strategy-21 策略的实盘交易环境，包含严格的风险控制参数",
+  "// 警告": "本配置用于真实交易，请确保充分测试后再使用！",
+  
+  "// 基础交易模式": "实盘交易模式",
+  "trading_mode": "spot",
+  "dry_run": false,
+  "dry_run_wallet": 0,
+  "cancel_open_orders_on_exit": true,
+  
+  "// 资金管理 - 生产环境": "严格的资金管理设置",
+  "max_open_trades": 6,
+  "minimum_trade_amount": 15,
+  "stake_currency": "USDT",
+  "stake_amount": "unlimited",
+  "tradable_balance_ratio": 0.85,
+  "available_capital": 5000,
+  "fiat_display_currency": "USD",
+  
+  "// 时间框架配置": "生产环境使用稳定的时间周期",
+  "timeframe": "5m",
+  "startup_candle_count": 500,
+  "process_only_new_candles": true,
+  
+  "// 交易所配置 - 生产环境": "使用真实API进行交易",
+  "exchange": {
+    "name": "binance",
+    "key": "${BINANCE_API_KEY}",
+    "secret": "${BINANCE_SECRET_KEY}",
+    "ccxt_config": {
+      "enableRateLimit": true,
+      "rateLimit": 200,
+      "sandbox": false
+    },
+    "ccxt_async_config": {
+      "enableRateLimit": true,
+      "rateLimit": 200,
+      "sandbox": false
+    },
+    "pair_whitelist": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "BNB/USDT",
+      "ADA/USDT",
+      "SOL/USDT",
+      "MATIC/USDT",
+      "DOT/USDT",
+      "AVAX/USDT"
+    ],
+    "pair_blacklist": [
+      ".*UP/.*",
+      ".*DOWN/.*",
+      ".*(3|5)(S|L)/.*",
+      ".*BEAR/.*",
+      ".*BULL/.*",
+      ".*HEDGE/.*"
+    ]
+  },
+  
+  "// 价格获取配置": "生产环境使用订单簿获取准确价格",
+  "entry_pricing": {
+    "price_side": "same",
+    "use_order_book": true,
+    "order_book_top": 1,
+    "price_last_balance": 0.0,
+    "check_depth_of_market": {
+      "enabled": true,
+      "bids_to_ask_delta": 1
+    }
+  },
+  
+  "exit_pricing": {
+    "price_side": "same",
+    "use_order_book": true,
+    "order_book_top": 1
+  },
+  
+  "// 订单类型配置": "生产环境订单类型设置",
+  "order_types": {
+    "entry": "limit",
+    "exit": "limit",
+    "emergency_exit": "market",
+    "force_entry": "market",
+    "force_exit": "market",
+    "stoploss": "market",
+    "stoploss_on_exchange": true,
+    "stoploss_on_exchange_interval": 60,
+    "stoploss_on_exchange_market_ratio": 0.99
+  },
+  
+  "order_time_in_force": {
+    "entry": "GTC",
+    "exit": "GTC"
+  },
+  
+  "// 订单超时配置": "生产环境订单超时设置",
+  "unfilledtimeout": {
+    "entry": 15,
+    "exit": 30,
+    "exit_timeout_count": 0,
+    "unit": "minutes"
+  },
+  
+  "// 交易对选择配置": "生产环境使用动态筛选",
+  "pairlists": [
+    {
+      "method": "StaticPairList"
+    },
+    {
+      "method": "VolumePairList",
+      "number_assets": 15,
+      "sort_key": "quoteVolume",
+      "min_value": 5000000,
+      "refresh_period": 3600,
+      "lookback_days": 1
+    },
+    {
+      "method": "PrecisionFilter"
+    },
+    {
+      "method": "PriceFilter",
+      "low_price_ratio": 0.02,
+      "min_price": 0.00001,
+      "max_price": 500
+    }
+  ],
+  
+  "// 保护机制配置 - 生产环境": "严格的风险保护设置",
+  "protections": [
+    {
+      "method": "StoplossGuard",
+      "lookback_period_candles": 120,
+      "trade_limit": 3,
+      "stop_duration_candles": 120,
+      "required_profit": -0.08,
+      "only_per_pair": false
+    },
+    {
+      "method": "MaxDrawdown",
+      "lookbook_period_candles": 300,
+      "trade_limit": 15,
+      "stop_duration_candles": 200,
+      "max_allowed_drawdown": 0.15
+    },
+    {
+      "method": "LowProfitPairs",
+      "lookback_period_candles": 600,
+      "trade_limit": 1,
+      "stop_duration_candles": 120,
+      "required_profit": -0.03
+    },
+    {
+      "method": "CooldownPeriod",
+      "stop_duration_candles": 24,
+      "only_per_pair": true
+    }
+  ],
+  
+  "// 策略配置": "Strategy-21 VATSM 策略",
+  "strategy": "Strategy21VATSM",
+  "strategy_path": "user_data/strategies/",
+  
+  "// 数据存储配置": "生产环境数据库配置",
+  "db_url": "sqlite:///user_data/strategy21_live_trades.sqlite",
+  "user_data_dir": "user_data",
+  "datadir": "user_data/data",
+  
+  "// 日志配置": "生产环境日志设置",
+  "log_level": "INFO",
+  "logfile": "logs/strategy21_live.log",
+  
+  "// API服务配置": "生产环境API设置",
+  "api_server": {
+    "enabled": true,
+    "listen_ip_address": "127.0.0.1",
+    "listen_port": 8082,
+    "verbosity": "error",
+    "enable_openapi": false,
+    "jwt_secret_key": "${STRATEGY21_JWT_SECRET}",
+    "CORS_origins": [],
+    "username": "${STRATEGY21_API_USER}",
+    "password": "${STRATEGY21_API_PASS}"
+  },
+  
+  "// 机器人配置": "生产环境机器人设置",
+  "bot_name": "Strategy21-VATSM-Live",
+  "initial_state": "running",
+  "force_entry_enable": false,
+  
+  "// 内部配置": "生产环境系统参数",
+  "internals": {
+    "process_throttle_secs": 5,
+    "heartbeat_interval": 60,
+    "sd_notify": true
+  },
+  
+  "// Telegram通知配置": "生产环境通知设置",
+  "telegram": {
+    "enabled": true,
+    "token": "${TELEGRAM_BOT_TOKEN}",
+    "chat_id": "${TELEGRAM_CHAT_ID}",
+    "notification_settings": {
+      "status": "silent",
+      "warning": "on",
+      "startup": "on",
+      "entry": "on",
+      "exit": {
+        "roi": "on",
+        "emergency_exit": "on",
+        "force_exit": "on",
+        "exit_signal": "on",
+        "trailing_stop_loss": "on",
+        "stop_loss": "on",
+        "stoploss_on_exchange": "on",
+        "custom_exit": "on"
+      },
+      "reload": "on",
+      "buy_cancel": "on",
+      "sell_cancel": "on",
+      "buy_fill": "on",
+      "sell_fill": "on",
+      "protection_trigger": "on",
+      "protection_trigger_global": "on"
+    }
+  },
+  
+  "// Edge位置管理配置": "生产环境位置优化",
+  "edge": {
+    "enabled": false,
+    "process_throttle_secs": 7200,
+    "calculate_since_number_of_days": 21,
+    "allowed_risk": 0.01,
+    "stoploss_range_min": -0.01,
+    "stoploss_range_max": -0.08,
+    "stoploss_range_step": -0.01,
+    "minimum_winrate": 0.70,
+    "minimum_expectancy": 0.30,
+    "min_trade_number": 20,
+    "max_trade_duration_minute": 4320,
+    "remove_pumps": true
+  },
+  
+  "// 手续费配置": "生产环境手续费",
+  "fee": 0.001,
+  
+  "// Strategy-21 特定配置覆盖": "生产环境的保守参数设置",
+  "strategy_config_overrides": {
+    "// VATSM指标参数 - 生产环境": "使用经过充分测试的稳定参数",
+    "vatsm_indicators": {
+      "volume_sma_period": 20,
+      "volume_threshold_multiplier": 1.8,
+      "volume_spike_threshold": 2.5,
+      "atr_period": 14,
+      "atr_smoothing_period": 3,
+      "trend_sma_period": 50,
+      "trend_ema_period": 21,
+      "trend_confirmation_candles": 5,
+      "strength_rsi_period": 14,
+      "strength_rsi_overbought": 75,
+      "strength_rsi_oversold": 25,
+      "momentum_period": 14,
+      "momentum_smoothing": 3
+    },
+    
+    "// 信号系统 - 生产环境": "提高信号质量，减少假信号",
+    "signal_system": {
+      "entry_signals": {
+        "volume_threshold": 1.8,
+        "atr_min_threshold": 0.002,
+        "trend_alignment_required": true,
+        "trend_alignment_tolerance": 0.05,
+        "strength_min_score": 0.7,
+        "strength_rsi_range": [25, 75],
+        "momentum_min_score": 0.6,
+        "confluence_required_signals": 4,
+        "max_correlation_threshold": 0.7
+      },
+      "exit_signals": {
+        "profit_target_pct": 0.03,
+        "profit_target_dynamic": true,
+        "profit_target_atr_multiplier": 3.5,
+        "trend_reversal_sensitivity": 0.8,
+        "strength_weakness_threshold": 0.2,
+        "momentum_exhaustion_threshold": 0.15
+      },
+      "signal_confirmation": {
+        "confirmation_candles": 3,
+        "signal_timeout_candles": 8,
+        "reentry_cooldown_candles": 12,
+        "signal_strength_threshold": 0.75
+      }
+    },
+    
+    "// 仓位管理 - 生产环境": "保守的仓位分配策略",
+    "position_management": {
+      "position_levels": {
+        "small": {
+          "min_pct": 0.008,
+          "max_pct": 0.015,
+          "signal_threshold_min": 0.0,
+          "signal_threshold_max": 0.5
+        },
+        "medium": {
+          "min_pct": 0.02,
+          "max_pct": 0.035,
+          "signal_threshold_min": 0.5,
+          "signal_threshold_max": 0.8
+        },
+        "large": {
+          "min_pct": 0.04,
+          "max_pct": 0.06,
+          "signal_threshold_min": 0.8,
+          "signal_threshold_max": 1.0
+        }
+      },
+      "risk_adjustment": {
+        "atr_risk_multiplier": 1.8,
+        "volatility_scaling": true,
+        "kelly_fraction": 0.2,
+        "max_portfolio_risk": 0.4,
+        "drawdown_scaling": true,
+        "correlation_adjustment": true
+      },
+      "position_limits": {
+        "max_single_position_pct": 0.08,
+        "max_total_positions": 6,
+        "max_correlation_positions": 2,
+        "min_position_spacing_hours": 2,
+        "max_daily_positions": 5
+      }
+    },
+    
+    "// 风险管理 - 生产环境": "严格的风险控制机制",
+    "risk_management": {
+      "three_layer_stop_loss": {
+        "fixed_stop_pct": 0.018,
+        "fixed_stop_enabled": true,
+        "trailing_stop_pct": 0.012,
+        "trailing_stop_enabled": true,
+        "trailing_stop_positive": 0.015,
+        "trailing_stop_positive_offset": 0.008,
+        "atr_multiplier": 1.8,
+        "atr_stop_enabled": true,
+        "min_profit_to_trail": 0.015
+      },
+      "drawdown_protection": {
+        "max_drawdown_pct": 0.12,
+        "max_drawdown_absolute": 600,
+        "warning_drawdown_pct": 0.08,
+        "recovery_threshold": 0.04,
+        "position_scaling_enabled": true,
+        "position_scaling_factor": 0.4,
+        "daily_peak_reset": true
+      },
+      "emergency_controls": {
+        "max_daily_loss_pct": 0.05,
+        "max_daily_loss_absolute": 250,
+        "max_consecutive_losses": 4,
+        "consecutive_loss_scaling": 0.6,
+        "volatility_threshold": 2.5,
+        "volatility_shutdown": true,
+        "liquidity_threshold": 0.7,
+        "force_close_timeout_seconds": 180
+      },
+      "time_based_risks": {
+        "max_position_hold_hours": 24,
+        "weekend_close_positions": true,
+        "holiday_trading": false
+      }
+    },
+    
+    "// 市场条件适应 - 生产环境": "根据市场状态调整策略参数",
+    "market_conditions": {
+      "trend_detection": {
+        "trend_strength_threshold": 0.7,
+        "sideways_range_pct": 0.015,
+        "trend_confirmation_candles": 8
+      },
+      "volatility_regimes": {
+        "low_volatility_threshold": 0.6,
+        "high_volatility_threshold": 1.8,
+        "regime_change_threshold": 0.25
+      },
+      "adaptive_parameters": {
+        "enabled": true,
+        "adaptation_period": 100,
+        "performance_threshold": 0.65,
+        "parameter_adjustment_range": 0.15
+      }
+    },
+    
+    "// 交易执行 - 生产环境": "优化的订单执行设置",
+    "execution_settings": {
+      "order_execution": {
+        "entry_order_type": "limit",
+        "exit_order_type": "limit",
+        "limit_order_offset_pct": 0.0005,
+        "market_order_threshold": 0.003,
+        "order_timeout_minutes": 15,
+        "partial_fill_handling": "cancel_remaining",
+        "minimum_fill_ratio": 0.95
+      },
+      "slippage_control": {
+        "max_slippage_pct": 0.003,
+        "slippage_buffer_pct": 0.0005,
+        "dynamic_slippage_adjustment": true,
+        "volume_weighted_slippage": true
+      }
+    }
+  },
+  
+  "// 生产环境专用配置": "仅在实盘环境使用的特殊设置",
+  "live_specific_settings": {
+    "// 安全检查": "实盘交易前的安全验证",
+    "safety_checks": {
+      "balance_check_enabled": true,
+      "min_balance_threshold": 100,
+      "api_permissions_check": true,
+      "exchange_status_check": true,
+      "network_connectivity_check": true
+    },
+    
+    "// 监控和报警": "实时监控和异常报警",
+    "monitoring": {
+      "performance_monitoring": true,
+      "risk_monitoring": true,
+      "system_health_monitoring": true,
+      "alert_on_consecutive_losses": 3,
+      "alert_on_drawdown_threshold": 0.08,
+      "alert_on_system_errors": true
+    },
+    
+    "// 备份和恢复": "数据备份和灾难恢复",
+    "backup_settings": {
+      "auto_backup_enabled": true,
+      "backup_frequency_hours": 4,
+      "backup_retention_days": 30,
+      "trade_log_backup": true,
+      "config_backup": true
+    }
+  }
+}
