@@ -93,7 +93,7 @@ class ConfigManager:
         # 添加策略相关配置
         config.update({
             "strategy": strategy_name,
-            "strategy_path": "strategies/",
+            "strategy_path": "user_data/strategies/",
             **strategy_config
         })
         

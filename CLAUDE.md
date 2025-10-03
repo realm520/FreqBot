@@ -46,17 +46,13 @@ freqbot/               # 轻量级 Python 框架（仅用于本地工具）
 ├── config/            # ConfigManager - 配置文件管理
 └── strategies/        # StrategyRegistry, StrategyLoader - 策略发现和加载
 
-strategies/            # 策略实现（按类别组织）
-├── market_maker/      # 做市商策略
-├── vatsm/             # 波动率适应性策略
-└── grid_trading/      # 网格交易策略
-
 configs/               # 配置文件（环境隔离）
 ├── environments/      # 环境配置（demo.json, production.json等）
 ├── strategies/        # 策略特定配置
 └── templates/         # 配置模板
 
 user_data/             # FreqTrade 数据目录（映射到 Docker 容器）
+├── strategies/        # 策略实现（所有策略文件）
 ├── data/              # 历史数据
 ├── backtest_results/  # 回测结果
 └── config_docker.json # Docker 容器使用的配置
@@ -88,7 +84,7 @@ docker_download_data.sh # 数据下载脚本
 所有策略必须：
 1. 继承 `freqtrade.strategy.IStrategy`
 2. 实现 `populate_indicators()`, `populate_entry_trend()`, `populate_exit_trend()`
-3. 放置在 `strategies/` 或 `user_data/strategies/` 目录下（可按类别分组）
+3. 放置在 `user_data/strategies/` 目录下
 4. 包含元数据字典（可选但推荐）
 
 示例结构：
@@ -125,8 +121,8 @@ uv lock                       # 锁定版本
 
 ### 测试
 ```bash
-# 运行所有测试
-uv run pytest tests/
+# 使用 Docker 回测验证策略
+./docker_run_backtest.sh --strategy <策略名>
 
 # 进入虚拟环境
 uv shell
@@ -140,7 +136,7 @@ uv shell
 
 ## 开发流程
 
-1. **策略开发**: 在 `strategies/` 目录下实现新策略
+1. **策略开发**: 在 `user_data/strategies/` 目录下实现新策略
 2. **回测验证**: 使用 `docker_run_backtest.sh` 验证策略有效性
 3. **模拟交易**: 通过 Docker Compose 在模拟环境中测试策略
 4. **实盘部署**: 小资金实盘验证后逐步扩大规模
